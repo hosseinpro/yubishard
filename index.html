@@ -78,6 +78,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 }
 
 .banner-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); flex: none; }
+.banner a { margin-left: auto; font-weight: 600; white-space: nowrap; }
 
 .top {
   display: flex;
@@ -696,8 +697,9 @@ input[type=range] { width: 100%; margin: 10px 0 0; accent-color: var(--accent); 
 
 <div class="banner">
   <span class="banner-dot"></span>
-  <span>This file is the whole app. Save it and open it on a machine with no network — nothing you
-    type ever leaves your browser.</span>
+  <span>For real backups, download YubiShard and run it offline on a machine with no network.
+    Nothing you type here ever leaves your browser.</span>
+  <a href="index.html" download="yubishard.html">Download for offline use →</a>
 </div>
 
 <header class="top">
