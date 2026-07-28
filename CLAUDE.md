@@ -4,62 +4,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-YubiShard splits a crypto wallet recovery phrase into Shamir shares, encrypts each with a different YubiKey, and walks the user through storing and restoring them. It is a single-page app with no server, no dependencies to install, and no build step. `index.html` is the entire product.
+YubiShard splits a wallet recovery phrase into Shamir shares, seals each one, and walks the user through storing and restoring them. `index.html` is the entire product: one hand-written file, no dependencies, no framework, no build step.
 
 ## Running it
 
-Open `index.html` in a browser (`open index.html` on macOS). It works from `file://` — React and the runtime are embedded in the file, nothing is fetched at load time. There is no test suite, linter, or package manager; verification is manual, by walking both flows in the browser.
+Open `index.html` in a browser (`open index.html`). It works from `file://` — everything is inline and the page makes zero network requests. There is no package manager, test suite, or linter; verification is manual.
 
-## The critical fact about `index.html`
-
-`index.html` is a **generated bundle**, not hand-written source. Its 384 lines are mostly a loader plus base64+gzip blobs. Editing the app means editing a JSON-escaped string on **line 382**, inside `<script type="__bundler/template">` — that one line holds the entire authored page (~700 lines of HTML + JS when unescaped).
-
-Do not try to edit line 382 in place. Unpack it, edit the plain file, repack:
+To drive it headlessly (useful for regression checks), append a script to a **copy** of the file that clicks through the flow and writes results into `document.title`, then:
 
 ```bash
-# unpack -> src.html
-python3 -c "
-import re,json
-s=open('index.html').read()
-m=re.search(r'(<script type=\"__bundler/template\">\s*)(\".*?\")(\s*</script>)', s, re.S)
-open('src.html','w').write(json.loads(m.group(2)))"
-
-# ... edit src.html ...
-
-# repack src.html -> index.html
-python3 -c "
-import re,json
-s=open('index.html').read(); src=open('src.html').read()
-m=re.search(r'(<script type=\"__bundler/template\">\s*)(\".*?\")(\s*</script>)', s, re.S)
-open('index.html','w').write(s[:m.start(2)] + json.dumps(src,ensure_ascii=False).replace('</','<\\\\u002F') + s[m.end(2):])"
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu \
+  --user-data-dir=/tmp/cp --virtual-time-budget=30000 --dump-dom "file:///abs/path/copy.html"
 ```
 
-`ensure_ascii=False` and the `</` → `</` escape both matter — without them the repack is not byte-identical to the original encoding, and an unescaped `</script>` inside the string would terminate the tag early. Round-tripping with no edits must produce an unchanged `index.html`; check that before trusting an edit.
+`--virtual-time-budget` fast-forwards the 900ms `setTimeout` fakes, so a full backup + restore completes in seconds. Do not add the harness to `index.html` itself.
 
-The other two blobs in the file are the `dc-runtime` bundle and React 18 UMD, stored gzip+base64 in `<script type="__bundler/manifest">` and decoded to blob URLs at boot. Leave them alone. The runtime is generated from a `dc-runtime` project that is **not in this repo**, so it cannot be rebuilt here.
+## Structure
 
-## Architecture of the app source
+Four sections in one file: inline `<style>`, static markup for every screen, `<template>` elements for repeated rows, one inline `<script>`.
 
-The unpacked source is a `dc-runtime` document: a `<x-dc>` template plus a `<script type="text/x-dc" data-dc-script>` holding one `class Component extends DCLogic`.
+Every screen exists in the DOM at all times and is toggled with `hidden`. Navigation is two-axis — `state.view` (`'home' | 'backup' | 'restore'`) and `state.step` — resolved in `showPanels()`.
 
-Template syntax is not JSX and not plain HTML:
-- `{{ name }}` interpolates a value — usable in text and in attribute values, including inside inline `style` strings (colors and paddings are computed in JS and interpolated).
-- `<sc-if value="{{ flag }}">` conditionally renders; `<sc-for list="{{ rows }}" as="r">` iterates, with `{{ r.field }}` inside.
-- Event handlers are `sc-camel-on-click="{{ handler }}"` — the `sc-camel-` prefix maps to the camelCase React prop (`onClick`, `onChange`, `onPaste`).
+## Conventions that matter
 
-`Component` holds all state in a single flat `state` object and exposes everything the template needs from one `renderVals()` method, which returns a flat bag of primitives, precomputed style strings, row arrays, and closures. There are no subcomponents. Adding UI means adding keys to that returned object and referencing them in the template — keep the two in sync, since a missing key renders as an empty placeholder rather than an error.
+**State is one flat object.** `setState(patch)` merges and calls `render()`. `render()` writes to the DOM rather than returning anything; it dispatches to one `renderX()` per panel.
 
-Navigation is a two-axis state machine: `state.view` is `'home' | 'backup' | 'restore'`, and `state.step` indexes the stage within a flow. The template gates each stage on a derived boolean (`bSeed`, `bSplit`, `bEnc`, `bVerify`, `bDone` for backup; `rCollect`, `rUnlock`, `rDone` for restore). The sidebar stepper is built from `backupSteps`/`restoreSteps` in `renderVals()`.
+**Style state lives in CSS, not JS.** Status colors are modifier classes (`.step.is-done`, `.row.is-active`, `.status.ok`, `.chip.is-on`, `.viz.is-needed`, `.hint.err`, `.words-out.is-hidden`). Do not compute color strings in JS and interpolate them into `style` attributes — that was the previous design and it is what made the file unreadable.
 
-Progress through the per-share loops is implicit rather than stored: the active share index is `state.sealed.length` when encrypting and `state.rParts.length` when unlocking, so a row is "done" if its index is below that and "active" if equal. Both flows share `state.busy` for the fake YubiKey wait.
+**`syncList(container, tplId, count, update)`** grows or shrinks a list to `count` by appending/removing tail nodes, then updates each child in place. Surviving nodes are never replaced. This is what lets a full re-render happen on every keystroke without destroying focus — do not swap it for an `innerHTML` rewrite.
+
+**Inputs are uncontrolled.** `setVal()` writes to a field only when it is not `document.activeElement` and the value actually differs. Assigning `.value` to a focused input resets the caret, so any new field must go through `setVal()`. Programmatic fills (paste, demo, wipe, 12↔24 switch) are the deliberate exception.
+
+**Events are delegated.** One `click`/`input`/`paste` listener on `document` dispatches through the `CLICKS` and `INPUTS` maps, keyed by `data-act`. Row index comes from `closest('[data-i]')`, which `syncList` stamps. To add a control: add `data-act="name"` in the markup and a handler in the matching map.
 
 ## Crypto layer
 
-Top of the script, above the component:
+`splitBytes` / `combineShares` implement Shamir over GF(256), applied byte-wise. The secret is the 4-byte magic `YS1\0` followed by the UTF-8 phrase; recombination checks that magic to catch a wrong passphrase or an altered share. Wire format is `YS1.<threshold>.<base64 label>.<base64 ciphertext>` — the threshold is embedded so the restore flow can size itself from the first pasted share.
 
-- `EXP`/`LOG` tables and `mul`/`div` implement GF(256) arithmetic; `splitBytes(bytes, n, m)` and `combineShares(shares)` are Shamir's Secret Sharing over that field, applied byte-wise.
-- The secret is the 4-byte magic `YS1\0` (`MAGIC`) followed by the UTF-8 phrase. Recombination checks the magic to detect a wrong passphrase or a corrupted share before trying to decode the phrase.
-- Wire format is `YS1.<threshold>.<base64 label>.<base64 ciphertext>`, produced by `sealShare` and parsed by `openShare`. The threshold is embedded so the restore flow can read `m` from the first pasted share. Base64 padding is stripped from the label and re-added on parse.
-- `fnv()` is FNV-1a, used both for the user-facing seed fingerprint and as the keystream seed.
+**The YubiKey step and the encryption are simulated.** `sealShare` XORs against an xorshift32 keystream seeded by a 32-bit FNV hash of label+passphrase; the "Touch your YubiKey…" state is a `setTimeout`; `splitBytes` draws coefficients from `Math.random()`. Shares offer no confidentiality, and two shares sealed with the same label and passphrase reuse the keystream. The footer says so on-screen. If you touch this layer, be explicit with the user about whether a change preserves the mock or starts replacing it with real crypto.
 
-**The YubiKey integration and the encryption are currently simulated.** There is no WebAuthn, no HMAC-SHA1 challenge–response, no AES-GCM and no Argon2id, despite what the footer claims. `sealShare` XORs against an xorshift32 keystream seeded by `fnv('yubishard|' + label + '|' + pass)`, and the "Touch your YubiKey…" state is a 900ms `setTimeout`. `splitBytes` also draws its polynomial coefficients from `Math.random()` rather than `crypto.getRandomValues`. Treat the current shares as offering no confidentiality — this is a working UX prototype of the flow, not a usable backup tool. When touching this layer, be explicit with the user about whether a change is meant to preserve the mock or begin replacing it with real crypto.
+Two known gaps, both inherited and both intentional to preserve: the magic check only covers the first 4 bytes, so corruption later in a blob rebuilds a wrong phrase silently (there is no MAC); and a wrong passphrase during restore is only detected after the final share, because `openShare` cannot fail on its own.
+
+The wire format is a compatibility surface — blobs from earlier builds still open. Changing `sealShare`, `openShare`, `fnv`, `stream`, or the magic breaks every share a user has already written down.
+
+## file:// caveats already handled
+
+- `navigator.clipboard` may be missing or reject on some `file://` origins; `copyText()` falls back to a hidden textarea plus `execCommand('copy')` and only reports "Copied" on success.
+- `printSheet()` returns `false` when a popup blocker nulls `window.open`, and `tryPrint()` surfaces that in `#print-msg` instead of failing silently.
+- `downloadEach` staggers saves by 220ms; browsers drop simultaneous downloads from a single gesture.
