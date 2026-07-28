@@ -1293,20 +1293,30 @@ var PRINT_CSS = 'body{font:13px/1.5 Helvetica,Arial,sans-serif;margin:40px;color
   + 'pre{font:11px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all;'
   + 'background:#f4f4f2;padding:10px;border-radius:6px;margin:0}';
 
+// Closing tags below are written as <\/tag> on purpose. JavaScript reads \/ as a
+// plain /, so the strings are unchanged, but the raw closing-tag text never appears
+// in this file. Two things would otherwise break it:
+//   1. The HTML parser ends this block at the first raw script end-tag, even inside
+//      a string or a comment.
+//   2. Live-reload dev servers (VS Code Live Server, live-server) splice their socket
+//      script in at the FIRST body end-tag in the response. Unescaped, that match is
+//      here rather than at the bottom of the page, so the injected markup lands in
+//      the middle of this function and takes the whole app down.
 // Returns false when a popup blocker nulls the window, so the caller can say so.
 function printSheet(rows, n, m, phrase) {
   var w = window.open('', '_blank');
   if (!w) return false;
   var body = rows.map(function (r) {
     return '<div class="s"><h3>Share ' + (r.i + 1) + ' of ' + n + ' &middot; '
-      + esc(r.x.label) + '</h3><p>Any ' + m + ' of ' + n
+      + esc(r.x.label) + '<\/h3><p>Any ' + m + ' of ' + n
       + ' shares restore the seed. This one opens only with the YubiKey named above'
-      + (r.x.pass ? ' and its passphrase' : '') + '.</p><pre>' + esc(r.x.blob) + '</pre></div>';
+      + (r.x.pass ? ' and its passphrase' : '') + '.<\/p><pre>' + esc(r.x.blob)
+      + '<\/pre><\/div>';
   }).join('');
-  w.document.write('<html><head><title>YubiShard paper backup</title><style>' + PRINT_CSS
-    + '</style></head><body><h1>YubiShard paper backup</h1><small>Fingerprint ' + fp(phrase)
+  w.document.write('<html><head><title>YubiShard paper backup<\/title><style>' + PRINT_CSS
+    + '<\/style><\/head><body><h1>YubiShard paper backup<\/h1><small>Fingerprint ' + fp(phrase)
     + ' &middot; ' + m + '-of-' + n + ' &middot; ' + new Date().toISOString().slice(0, 10)
-    + '</small>' + body + '</body></html>');
+    + '<\/small>' + body + '<\/body><\/html>');
   w.document.close();
   w.print();
   return true;
