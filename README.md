@@ -24,6 +24,16 @@ Download `index.html` and open it in a browser. That's the whole app — no inst
 - [How the YubiKey Works](https://www.yubico.com/products/how-the-yubikey-works/) — what the device is and what the touch actually does.
 - [Setup](https://www.yubico.com/setup/) — Yubico's getting-started walkthrough if you've never used one.
 
+**Key derivation from a touch (WebAuthn PRF)**
+
+A PRF — pseudo-random function — returns a value that looks random for any given input, but always returns the same value for the same input. That is what lets a hardware key stand in for a stored password: feed it a salt, get back a repeatable 32 bytes, and derive an encryption key from them without the root secret ever leaving the device.
+
+- [Web Authentication extensions § prf](https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API/WebAuthn_extensions#prf) — MDN's short definition, framing the PRF as a random oracle and sketching the encryption use case.
+- [Hardware-Backed Key Derivation with WebAuthn PRF and the YubiKey](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/) — Yubico's explainer for what the extension buys you on real hardware.
+- [A Developer's Guide to Deriving Keys with WebAuthn PRF and YubiKeys](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/Developers_Guide_to_PRF.html) — the practical version: `navigator.credentials` calls, HKDF, key rotation, multi-device unlock.
+- [CTAP2 HMAC Secret Deep Dive](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/CTAP2_HMAC_Secret_Deep_Dive.html) — the `hmac-secret` layer underneath, including how the salt is domain-separated and a reference implementation in C against `libfido2`.
+- [WebAuthn Level 3 § Pseudo-random function extension](https://www.w3.org/TR/webauthn-3/#prf-extension) — the normative definition.
+
 ## License
 
 MIT
