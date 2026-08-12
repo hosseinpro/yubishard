@@ -2526,14 +2526,55 @@
 
     function challenge() { return crypto.getRandomValues(new Uint8Array(32)); }
 
+    // Credential IDs minted during this session, passed to create() as
+    // excludeCredentials so the authenticator itself refuses a key we have
+    // already written to. Costs no extra ceremony and cannot be cancelled past.
+    var enrolledIds = [];
+
+    /* Look for a share already on the inserted key.
+
+       Without this check, create() would happily mint a *second* credential and
+       blob on the same key. Two shares on one device silently lowers the real
+       threshold, because that one key then counts twice — a 3-of-5 where one key
+       holds two shares is really a 2-of-4.
+
+       WebAuthn deliberately makes "no credential here" and "user cancelled"
+       indistinguishable, so only a positive find blocks the write. Cancelling
+       this prompt simply leads to the create() prompt, and cancelling that
+       writes nothing. Note this is scoped to the current origin: a key holding a
+       share enrolled at a different address is not found, which is correct —
+       those are separate backups. */
+    function existingShareOnKey() {
+      return navigator.credentials.get({
+        publicKey: {
+          challenge: challenge(),
+          rpId: rpId(),
+          allowCredentials: [],
+          userVerification: 'required',
+          timeout: 120000,
+          extensions: { largeBlob: { read: true } }
+        }
+      }).then(function (assertion) {
+        var ext = assertion && assertion.getClientExtensionResults();
+        if (!ext || !ext.largeBlob || !ext.largeBlob.blob) return null;
+        try {
+          var rec = JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob)));
+          return (rec && rec.v === RECORD_VERSION && rec.share) ? rec : null;
+        } catch (e) { return null; }
+      }, function () { return null; });
+    }
+
     function friendlyAuthError(e) {
       if (!e) return new Error('The key did not respond.');
+      if (e.name === 'InvalidStateError') {
+        return new Error('This key already holds a share from this backup. Use a different one.');
+      }
       if (e.name === 'NotAllowedError') {
         return new Error('Cancelled, or the key was not touched in time. Try again.');
       }
       if (e.name === 'NotSupportedError') {
         return new Error('This browser or key cannot do what YubiShard needs. Use Chrome with a '
-          + 'YubiKey on firmware 5.5 or newer.');
+          + 'YubiKey on firmware 5.7 or newer.');
       }
       if (e.name === 'SecurityError') {
         return new Error('This page\'s address cannot be used with a security key. Open it as '
@@ -2542,44 +2583,60 @@
       return e;
     }
 
-    /* Creation and the blob write are two separate ceremonies: WebAuthn only
-       writes a large blob during an assertion, never at registration. That is why
-       the key asks for its PIN and a touch twice. */
+    /* Three ceremonies per key, so the user is prompted three times: check the
+       key is empty, create the credential, then write the blob. The last two are
+       separate because WebAuthn only writes a large blob during an assertion,
+       never at registration. */
     function writeShareToKey(record) {
       var bytes = utf8.encode(JSON.stringify(record));
       if (bytes.length > BLOB_BUDGET) {
         return Promise.reject(new Error('That label is too long to fit alongside the share.'));
       }
-      return navigator.credentials.create({
-        publicKey: {
-          challenge: challenge(),
-          rp: { id: rpId(), name: 'YubiShard' },
-          user: {
-            id: crypto.getRandomValues(new Uint8Array(16)),
-            // This is what Chrome's picker and `ykman fido credentials list`
-            // show, so it carries the user's own label for the key — a bare
-            // share number is no help when you are holding five of them.
-            name: 'YubiShard: ' + record.label
-              + ' (share-' + (record.i + 1) + '-of-' + record.n + ')',
-            displayName: record.label
-          },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-          authenticatorSelection: {
-            authenticatorAttachment: 'cross-platform',
-            residentKey: 'required',
-            userVerification: 'required'
-          },
-          timeout: 120000,
-          attestation: 'none',
-          extensions: { largeBlob: { support: 'required' } }
+      return existingShareOnKey().then(function (found) {
+        if (found) {
+          throw new Error('This key already holds share ' + (found.i + 1) + ' of ' + found.n
+            + (found.label ? ' ("' + found.label + '")' : '')
+            + '. Use a different key — two shares on one key would weaken the threshold.');
         }
+        return navigator.credentials.create({
+          publicKey: {
+            challenge: challenge(),
+            rp: { id: rpId(), name: 'YubiShard' },
+            user: {
+              id: crypto.getRandomValues(new Uint8Array(16)),
+              // This is what Chrome's picker and `ykman fido credentials list`
+              // show, so it carries the user's own label for the key — a bare
+              // share number is no help when you are holding five of them.
+              name: 'YubiShard: ' + record.label
+                + ' (share-' + (record.i + 1) + '-of-' + record.n + ')',
+              displayName: record.label
+            },
+            pubKeyCredParams: [
+              { type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: 'cross-platform',
+              residentKey: 'required',
+              userVerification: 'required'
+            },
+            // Backstop for the check above: the authenticator refuses outright
+            // if this key already took a share earlier in this session.
+            excludeCredentials: enrolledIds.map(function (id) {
+              return { type: 'public-key', id: id };
+            }),
+            timeout: 120000,
+            attestation: 'none',
+            extensions: { largeBlob: { support: 'required' } }
+          }
+        });
       }).then(function (cred) {
         if (!cred) throw new Error('The key did not return a credential.');
         var ext = cred.getClientExtensionResults();
         if (!ext.largeBlob || ext.largeBlob.supported !== true) {
-          throw new Error('This key cannot store a share. largeBlob needs YubiKey firmware 5.5 or '
-            + 'newer — check yours with "ykman fido info".');
+          throw new Error('This key cannot store a share. largeBlob needs YubiKey firmware 5.7 or '
+            + 'newer — check yours with "ykman info".');
         }
+        enrolledIds.push(cred.rawId);
         return navigator.credentials.get({
           publicKey: {
             challenge: challenge(),
@@ -2938,7 +2995,7 @@
       }
       setText($('#split-sentence'), sentence);
       setText($('#split-note'), 'You will need ' + state.n + ' YubiKeys, one per share, each on '
-        + 'firmware 5.5 or newer. A key cannot be cloned, so losing more than '
+        + 'firmware 5.7 or newer. A key cannot be cloned, so losing more than '
         + (state.n - state.m) + ' of them loses the backup. Have them all to hand before you start.');
       setText($('#split-next'), state.busy ? 'Splitting…' : 'Split into ' + state.n + ' shares');
       $('#split-next').disabled = state.busy;
@@ -3238,6 +3295,7 @@
     }
 
     function wipe() {
+      enrolledIds = [];
       setState({
         view: 'home', step: 0, count: 12, words: fill(12, ''), inputPass: '',
         secret: null, seedFp: '', seedErr: '', n: 5, m: 3, shares: [],
