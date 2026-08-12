@@ -1504,11 +1504,10 @@
 
     <footer class="foot">
       <span>SLIP-39</span>
-      <span>by Hossein Rezai</span>
       <span><b>Shares are stored in plain form on your YubiKeys, protected by the key's PIN. Anyone
           holding enough keys and their PINs has your seed.</b></span>
       <a href="https://github.com/hosseinpro/yubishard" target="_blank" rel="noopener">Source</a>
-      <span class="right">MIT licensed · runs entirely in your browser</span>
+      <span class="right">by Hossein Rezai · MIT licensed · runs entirely in your browser</span>
     </footer>
 
   </div>
@@ -2531,37 +2530,14 @@
     // already written to. Costs no extra ceremony and cannot be cancelled past.
     var enrolledIds = [];
 
-    /* Look for a share already on the inserted key.
-
-       Without this check, create() would happily mint a *second* credential and
-       blob on the same key. Two shares on one device silently lowers the real
-       threshold, because that one key then counts twice — a 3-of-5 where one key
-       holds two shares is really a 2-of-4.
-
-       WebAuthn deliberately makes "no credential here" and "user cancelled"
-       indistinguishable, so only a positive find blocks the write. Cancelling
-       this prompt simply leads to the create() prompt, and cancelling that
-       writes nothing. Note this is scoped to the current origin: a key holding a
-       share enrolled at a different address is not found, which is correct —
-       those are separate backups. */
-    function existingShareOnKey() {
-      return navigator.credentials.get({
-        publicKey: {
-          challenge: challenge(),
-          rpId: rpId(),
-          allowCredentials: [],
-          userVerification: 'required',
-          timeout: 120000,
-          extensions: { largeBlob: { read: true } }
-        }
-      }).then(function (assertion) {
-        var ext = assertion && assertion.getClientExtensionResults();
-        if (!ext || !ext.largeBlob || !ext.largeBlob.blob) return null;
-        try {
-          var rec = JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob)));
-          return (rec && rec.v === RECORD_VERSION && rec.share) ? rec : null;
-        } catch (e) { return null; }
-      }, function () { return null; });
+    /* Chrome permits only one WebAuthn request at a time, and a rejected one
+       takes a moment to tear down. With a real key the human takes seconds
+       between ceremonies so this never shows; with a DevTools virtual
+       authenticator the calls resolve instantly and the next request lands while
+       the previous is still closing, which surfaces as an intermittent failure
+       that succeeds on retry. Yield to the event loop between ceremonies. */
+    function settle() {
+      return new Promise(function (r) { setTimeout(r, 300); });
     }
 
     function friendlyAuthError(e) {
@@ -2583,21 +2559,22 @@
       return e;
     }
 
-    /* Three ceremonies per key, so the user is prompted three times: check the
-       key is empty, create the credential, then write the blob. The last two are
-       separate because WebAuthn only writes a large blob during an assertion,
-       never at registration. */
+    /* Two ceremonies per key: create the credential, then write the blob. They
+       are separate because WebAuthn only writes a large blob during an
+       assertion, never at registration.
+
+       There is deliberately no read-before-write check. Doing one means a
+       discoverable-credential get() against a key that is probably empty, and
+       Chrome answers that with a passkey dialog that waits to be dismissed
+       rather than failing fast — which reads as "the key will not connect".
+       excludeCredentials below covers reusing a key within one backup; a key
+       still carrying a share from an earlier session is not detected here. */
     function writeShareToKey(record) {
       var bytes = utf8.encode(JSON.stringify(record));
       if (bytes.length > BLOB_BUDGET) {
         return Promise.reject(new Error('That label is too long to fit alongside the share.'));
       }
-      return existingShareOnKey().then(function (found) {
-        if (found) {
-          throw new Error('This key already holds share ' + (found.i + 1) + ' of ' + found.n
-            + (found.label ? ' ("' + found.label + '")' : '')
-            + '. Use a different key — two shares on one key would weaken the threshold.');
-        }
+      return Promise.resolve().then(function () {
         return navigator.credentials.create({
           publicKey: {
             challenge: challenge(),
@@ -2637,15 +2614,17 @@
             + 'newer — check yours with "ykman info".');
         }
         enrolledIds.push(cred.rawId);
-        return navigator.credentials.get({
-          publicKey: {
-            challenge: challenge(),
-            rpId: rpId(),
-            allowCredentials: [{ type: 'public-key', id: cred.rawId }],
-            userVerification: 'required',
-            timeout: 120000,
-            extensions: { largeBlob: { write: bytes } }
-          }
+        return settle().then(function () {
+          return navigator.credentials.get({
+            publicKey: {
+              challenge: challenge(),
+              rpId: rpId(),
+              allowCredentials: [{ type: 'public-key', id: cred.rawId }],
+              userVerification: 'required',
+              timeout: 120000,
+              extensions: { largeBlob: { write: bytes } }
+            }
+          });
         });
       }).then(function (assertion) {
         var ext = assertion && assertion.getClientExtensionResults();
@@ -2739,7 +2718,7 @@
 
       // phrase entry
       count: 12, words: fill(12, ''), inputPass: '',
-      secret: null, seedFp: '', seedErr: '',
+      secret: null, seedFp: '', verifyFp: '', seedErr: '',
 
       // split
       n: 5, m: 3, shares: [],
@@ -2872,22 +2851,41 @@
       });
     }
 
+    /* The fingerprint a restore can reproduce unaided: always derived with an
+       empty passphrase, so it never depends on something the user has to
+       remember. The *displayed* fingerprint identifies the wallet and folds in a
+       BIP-39 passphrase; this one only has to prove the bytes came back intact.
+       Both sides call this same function so they cannot drift apart. */
+    function verificationFingerprint(secret, of) {
+      if (of === 'bip39-128' || of === 'bip39-256') {
+        return bip39FromEntropy(secret).then(function (phrase) {
+          return bip39Seed(phrase, '').then(bip32Fingerprint);
+        });
+      }
+      return bip32Fingerprint(secret);
+    }
+
     function refreshSeed() {
       var token = ++seedToken;
       if (!allWordsIn()) {
         if (state.secret || state.seedFp || state.seedErr) {
-          setState({ secret: null, seedFp: '', seedErr: '' });
+          setState({ secret: null, seedFp: '', verifyFp: '', seedErr: '' });
         }
         return;
       }
       readEnteredSeed().then(function (r) {
         if (token !== seedToken) return;
         setState({ secret: r.secret, seedErr: '' });
-        return bip32Fingerprint(r.seed).then(function (f) {
-          if (token === seedToken) setState({ seedFp: f });
+        return Promise.all([
+          bip32Fingerprint(r.seed),
+          verificationFingerprint(r.secret, originKind())
+        ]).then(function (fps) {
+          if (token === seedToken) setState({ seedFp: fps[0], verifyFp: fps[1] });
         });
       }).catch(function (e) {
-        if (token === seedToken) setState({ secret: null, seedFp: '', seedErr: e.message });
+        if (token === seedToken) {
+          setState({ secret: null, seedFp: '', verifyFp: '', seedErr: e.message });
+        }
       });
     }
 
@@ -3163,7 +3161,7 @@
     };
 
     function setCount(n) {
-      setState({ count: n, words: fill(n, ''), secret: null, seedFp: '', seedErr: '' });
+      setState({ count: n, words: fill(n, ''), secret: null, seedFp: '', verifyFp: '', seedErr: '' });
     }
 
     function doSplit() {
@@ -3186,7 +3184,8 @@
       setState({ busy: true, writeErr: '' });
       writeShareToKey({
         v: RECORD_VERSION, share: state.shares[i], of: originKind(), rp: rpId(),
-        n: state.n, m: state.m, i: i, label: label, fp: state.seedFp,
+        n: state.n, m: state.m, i: i, label: label,
+        fp: state.seedFp, vfp: state.verifyFp,
         created: new Date().toISOString().slice(0, 10)
       }).then(function () {
         setState({ written: state.written.concat([{ label: label }]), busy: false, keyLabel: '' });
@@ -3248,16 +3247,30 @@
       });
     }
 
-    function finishRestore(mnemonics, of, recordedFp) {
+    function finishRestore(mnemonics, of, recordedFp, recordedVfp) {
+      var recovered;
       return combineMnemonics(mnemonics, '').then(function (secret) {
-        return presentSecret(secret, of, recordedFp);
-      }).then(function (r) {
-        // When no fingerprint was recorded, derive one so there is still something
-        // to compare against.
-        if (r.fp) return r;
-        return combineMnemonics(mnemonics, '').then(function (secret) {
-          return bip32Fingerprint(secret).then(function (f) { r.fp = f; return r; });
+        recovered = secret;
+        // For a threshold of 1 there is no digest share, so nothing in SLIP-39
+        // itself would notice a corrupted share — this comparison is the only
+        // thing standing between the user and a silently wrong wallet.
+        if (!recordedVfp) return null;
+        return verificationFingerprint(secret, of).then(function (f) {
+          if (f !== recordedVfp) {
+            throw new Error('These shares rebuild a different wallet than the one that was backed '
+              + 'up — got ' + f + ', the keys record ' + recordedVfp + '. Do not use this result.');
+          }
+          return true;
         });
+      }).then(function (checked) {
+        return presentSecret(recovered, of, recordedFp).then(function (r) {
+          if (checked) r.kind += ' · fingerprint verified';
+          return r;
+        });
+      }).then(function (r) {
+        // A pasted share carries no record, so derive something to show.
+        if (r.fp) return r;
+        return verificationFingerprint(recovered, of).then(function (f) { r.fp = f; return r; });
       }).then(function (r) {
         setState({
           rSeed: r.text, rKind: r.kind, rFp: r.fp, rAlt: r.alt,
@@ -3273,13 +3286,21 @@
         if (state.rRecords.some(function (r) { return r.i === rec.i; })) {
           throw new Error('That key has already been read — try a different one.');
         }
+        // Catch a key from a different backup here, where we can name the
+        // problem, rather than letting it surface as a checksum failure later.
+        var first = state.rRecords[0];
+        if (first && (rec.fp !== first.fp || rec.n !== first.n || rec.m !== first.m)) {
+          throw new Error('That key belongs to a different backup (' + rec.fp + ', not '
+            + first.fp + ').');
+        }
         var recs = state.rRecords.concat([rec]);
         if (recs.length < recs[0].m) {
           setState({ rRecords: recs, busy: false });
           return null;
         }
         setState({ rRecords: recs });
-        return finishRestore(recs.map(function (r) { return r.share; }), recs[0].of, recs[0].fp);
+        return finishRestore(recs.map(function (r) { return r.share; }),
+          recs[0].of, recs[0].fp, recs[0].vfp);
       }).catch(function (e) {
         setState({ busy: false, readErr: e.message });
       });
@@ -3289,7 +3310,8 @@
       var list = state.pasted.map(function (t) { return (t || '').trim(); }).filter(Boolean);
       if (!list.length) return;
       setState({ busy: true, readErr: '' });
-      finishRestore(list, null, '').catch(function (e) {
+      // No record, so no origin and nothing to verify against.
+      finishRestore(list, null, '', '').catch(function (e) {
         setState({ busy: false, readErr: e.message });
       });
     }
@@ -3298,7 +3320,7 @@
       enrolledIds = [];
       setState({
         view: 'home', step: 0, count: 12, words: fill(12, ''), inputPass: '',
-        secret: null, seedFp: '', seedErr: '', n: 5, m: 3, shares: [],
+        secret: null, seedFp: '', verifyFp: '', seedErr: '', n: 5, m: 3, shares: [],
         written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1,
         vRecords: [], verifyMsg: '', verifyOk: null,
         rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
