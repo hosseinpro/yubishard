@@ -1009,29 +1009,26 @@
       margin-top: 10px;
     }
 
-    /* ---------- environment notice ---------- */
+    /* ---------- environment warning ---------- */
 
-    .env-note {
-      margin: 0 24px 18px;
-      padding: 12px 16px;
-      border: 1px solid var(--line);
-      border-left: 3px solid var(--warn);
-      border-radius: 10px;
-      background: var(--panel);
-      font-size: 13px;
-      line-height: 1.55;
-      color: var(--dim);
+    /* Lives in the header rather than a box of its own: which origin the keys
+       get bound to is a standing condition of the session, not a notice you
+       read once and dismiss. */
+    .env-warn {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: var(--danger);
+      border-left: 1px solid var(--line);
+      padding-left: 18px;
     }
 
-    .env-note b {
-      color: var(--text);
+    .env-warn b {
+      font-weight: 600;
     }
 
-    .env-note.is-blocked {
-      border-left-color: var(--danger);
-    }
-
-    .env-note code,
+    .env-warn code,
     .banner code {
       font: 12px var(--mono);
       background: var(--bg);
@@ -1272,13 +1269,12 @@
         <span class="brand-name">YubiShard</span>
       </a>
       <span class="tagline">Split a wallet seed across YubiKeys</span>
+      <span class="env-warn" id="env-banner"></span>
       <div class="top-actions">
         <a class="btn-ghost-sm" href="https://github.com/hosseinpro/yubishard" target="_blank" rel="noopener">GitHub</a>
         <button class="btn-ghost-sm" data-act="theme" id="theme-btn">Dark</button>
       </div>
     </header>
-
-    <div class="env-note" id="env-banner" hidden></div>
 
     <!-- ================= home ================= -->
 
@@ -3068,10 +3064,7 @@
     }
 
     function renderEnv() {
-      var el = $('#env-banner');
-      el.innerHTML = state.env.html;
-      el.classList.toggle('is-blocked', !state.env.ok);
-      show(el, true);
+      $('#env-banner').innerHTML = state.env.html;
       // The "download and run it locally" prompt is noise once you already are.
       show($('#dl-banner'), location.hostname !== 'localhost');
     }
