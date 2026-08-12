@@ -1,38 +1,219 @@
 # yubishard
 
-Split your crypto wallet recovery phrase into shares, encrypt each with a different YubiKey, and store them apart.
+Split a wallet recovery phrase into standard **SLIP-39** shares and store each one on a different
+YubiKey. Any threshold of the keys rebuilds the phrase; fewer reveal nothing at all.
+
+## Requirements
+
+- **Google Chrome** on macOS or Windows 11 (Firefox will never work — see below)
+- **Python 3** — only to serve the page locally
+- **YubiKeys with firmware 5.7 or newer**, one per share. Check with `ykman info`. See
+  [YubiKey firmware](#yubikey-firmware) — most keys already in circulation are too old, and no key
+  can be upgraded. To try the tool before buying any, see
+  [Trying it without a YubiKey](#trying-it-without-a-yubikey).
 
 ## Running it
 
-Download `index.html` and open it in a browser. That's the whole app — no install, no build step, no dependencies, and no network requests. It runs fine from `file://` on a machine that has never been online.
+You cannot open `index.html` directly. A security key identifies a site by its hostname, and a
+`file://` URL has none — so WebAuthn refuses before anything else happens. The page must be served.
 
-## Status
+```
+# macOS
+./serve.command
 
-**Prototype.** The YubiKey step and the per-share encryption are simulated, so the shares it produces offer no real confidentiality. The Shamir splitting over GF(256) is real; the sealing around it is a placeholder. Don't use it for a backup you care about yet.
+# Windows
+serve.bat
+```
+
+Either one serves this folder at `http://localhost:8000/` and opens Chrome. To do it by hand:
+
+```
+python3 -m http.server 8000 --bind localhost
+```
+
+**Open `http://localhost`, never `http://127.0.0.1`.** A bare IP address can never identify a site
+to a security key, and the call fails with a `SecurityError`.
+
+There is also a hosted copy at <https://yubishard.com/>. It works, but read the origin note below
+before enrolling keys there.
+
+## How it works
+
+1. Enter a **12- or 24-word BIP-39** phrase, or a **20-word SLIP-39** share (this is what a Trezor
+   single-share backup is).
+2. Choose a threshold — 3 of 5, say.
+3. Write each share onto its own YubiKey. Chrome asks for the key's PIN and a touch twice: once to
+   create the credential, once to store the share.
+4. Verify by unplugging each key, plugging it back in, and reading the share off it. The flow will
+   not finish until enough keys round-trip.
+
+The shares are ordinary SLIP-39 mnemonics — Trezor, Electrum, Sparrow, Rabby and BlueWallet all
+read them.
+
+## Things you have to know
+
+**The 20-word path is lossless. The 12/24-word path is not a conversion.**
+A 20-word SLIP-39 input is re-split into the same master secret, so a Trezor restores the identical
+wallet. A BIP-39 phrase is different: the shares carry its *entropy*, and BIP-39 and SLIP-39 derive
+the wallet seed incompatibly. Typing those shares into a Trezor's Shamir recovery gives a valid,
+empty, **different** wallet with no error. Restore through YubiShard, which re-encodes the entropy
+back into your phrase. The BIP-32 fingerprint shown at every stage is what makes this visible.
+
+**A BIP-39 passphrase is not stored in the shares.** It changes which wallet the phrase opens, and
+so the fingerprint, but it is not part of the entropy. You must remember it separately.
+
+**Shares are stored in plain form on the key.** They are encrypted at rest under a per-credential
+key, but that key crosses the USB wire in the clear during a read. Yubico is explicit that largeBlob
+"is not meant to be used to store sensitive data." The PIN is what stands between a stolen key and
+its share.
+
+**Record the PIN.** Eight wrong attempts locks the key's FIDO application, and recovering it means a
+reset that destroys the share. A PIN forgotten across every key in the quorum cannot be recovered by
+any means. `0000` is accepted if you would rather not manage one — but then possession of enough
+keys is possession of the wallet.
+
+**A YubiKey cannot be cloned.** Every key is enrolled independently, so your only redundancy is
+enrolling more keys than the threshold.
+
+**Credentials are bound to the address you enrolled at.** A key enrolled at `localhost` cannot be
+read at `yubishard.com`, or the other way round, and the tool cannot tell a wrong-origin key from a
+blank one. Enrolling at `yubishard.com` means that if the domain ever lapses, those shares can never
+be read again — there is no workaround, since a certificate error is not a secure context. Enrolling
+at `localhost` binds to a name nobody can take away, and any static web server will do. Prefer it.
+
+**Nothing is written to paper or disk.** No print, no download, no export. If you lose more keys
+than the scheme tolerates, the backup is gone.
+
+## Browser support
+
+largeBlob is a WebAuthn Level 3 extension. Chrome implements it on macOS, Linux, ChromeOS and
+Windows 11 — **not Windows 10**, which lacks it in `webauthn.dll`. Mozilla has stated Firefox does
+not intend to implement it.
+
+## YubiKey firmware
+
+**Firmware is fixed when the key is manufactured and can never be updated.** There is no tool and no
+Yubico service that does it — a key that could accept new firmware would be a key whose secrets
+could be extracted by malicious firmware. A key below the requirement is replaced, not upgraded.
+
+**Buy firmware 5.7 or newer.** largeBlob first appeared in firmware 5.5, but 5.5.x and 5.6.x shipped
+only on the Bio Series. The mainline 5 Series — 5 NFC, 5C NFC, 5 Nano and the rest — went from 5.4.3
+straight to 5.7, which reached retail on 2024-05-21. So although "5.5+" is what the extension itself
+requires, 5.7 is the number to shop for.
+
+| Firmware | largeBlob | Notes |
+|---|---|---|
+| YubiKey 4 and earlier | no | No FIDO2 at all, only U2F. Not a settings problem. |
+| 5.0 – 5.4.3 | no | FIDO2 and `hmac-secret`, but largeBlob does not exist yet. |
+| 5.5.x, 5.6.x | yes, 1024 B | Bio Series only. Never shipped on a mainline 5 Series key. |
+| 5.7+ | yes, 4096 B | What to buy. Retail since May 2024. |
+
+The stored record is capped at 900 bytes, so it fits in either capacity.
+
+**Checking a key you already own:**
+
+```
+ykman info
+```
+
+Read the `Firmware version` line. Note that `ykman fido info` does *not* help here — it prints the
+AAGUID, PIN retries and minimum PIN length, and says nothing about extensions. To test for the
+extension itself rather than inferring it from the version:
+
+```
+pipx install fido2
+python3 -c "
+from fido2.hid import CtapHidDevice
+from fido2.ctap2 import Ctap2
+for d in CtapHidDevice.list_devices():
+    i = Ctap2(d).info
+    print(i.versions, sorted(i.extensions))
+"
+```
+
+A usable key reports `FIDO_2_1` and lists `largeBlobKey`.
+
+**Where to buy.** Prefer [Yubico's own store](https://www.yubico.com/store/) over a marketplace.
+No listing anywhere states a firmware version, and channel stock sits in warehouses for years, so a
+reseller may still be shipping 5.4.3; buying direct gets current manufacture. Amazon also commingles
+inventory across sellers, which is a risk worth avoiding for a device that will hold part of a
+recovery phrase. If you buy elsewhere, verify the key at
+[yubico.com/genuine](https://www.yubico.com/genuine/) and run `ykman info` on arrival.
+
+Buy more keys than your threshold — a 2-of-2 means either loss destroys the backup.
+
+On 5.7, NFC is disabled until the key is first plugged into a USB port. This surprises people who
+tap a new key against a phone; it is not a fault.
+
+## Trying it without a YubiKey
+
+Chrome can emulate an authenticator that supports largeBlob, so the whole flow runs with no hardware
+at all. This is for development and for seeing what the tool does — **never for a real backup**, as
+the emulated key vanishes the moment you close DevTools.
+
+Software passkey providers are not an option here. 1Password, iCloud Keychain and Google Password
+Manager implement `prf` at best; none implement `largeBlob`, which assumes a device with a blob area
+rather than a synced credential store. The alternative to hardware is emulation, not another
+provider.
+
+With the page served at `http://localhost:8000/`:
+
+1. Open DevTools, then ⋮ → **More tools** → **WebAuthn**.
+2. Tick **Enable virtual authenticator environment**.
+3. Add an authenticator with protocol **ctap2**, transport **usb**, and tick **Supports resident
+   keys**, **Supports large blob** and **Supports user verification**.
+4. Tick **User verified** on the authenticator once it is listed.
+
+largeBlob requires resident keys and CTAP 2.1, so the large-blob checkbox stays greyed out until
+resident keys is ticked. That is the intended gating, not a fault.
+
+Registration and reads now resolve at once, with no PIN and no touch, and the panel lists each
+credential as it is created. Adding a second authenticator *without* large blob ticked is a good way
+to exercise the unsupported-key error path, which is awkward to test with real hardware.
+
+What emulation does not cover:
+
+- The two PIN-and-touch ceremonies, which is most of what the flow feels like in practice.
+- The size ceiling. The record is capped at 900 bytes against a real budget of about 1 KB, and an
+  emulated authenticator will not push back on an oversized one.
+- Reseating the key. The verification step asks for a physical unplug and replug; emulated, you are
+  only re-reading.
+
+## If this tool disappears
+
+The share sits in a FIDO2 large blob on the key. `python-fido2` can read it given the key's PIN,
+independently of this code. To do that you need the relying-party ID you enrolled at (`localhost`,
+or the domain), so record that along with the threshold, the fingerprint and the PIN.
+
+## Development
+
+`index.html` is the entire product — one hand-written file, no dependencies, no build step. See
+`CLAUDE.md` for the internals and how to run the SLIP-39 test vectors.
 
 ## Further reading
 
 **SLIP-39 / Shamir backup**
 
-- [SLIP39](https://trezor.io/slip39) — Trezor's explainer for the standard: why split a backup into shares, and how it compares to BIP-39.
-- [Multi-share Backup on Trezor](https://trezor.io/guides/backups-recovery/advanced-wallets/multi-share-backup-on-trezor) — the same idea from the user's side: creating shares, choosing a threshold, and recovering from them.
-- [SLIP-0039: Shamir's Secret-Sharing for Mnemonic Codes](https://github.com/satoshilabs/slips/blob/master/slip-0039.md) — the specification itself, covering the share format, checksum, passphrase, and encryption of the master secret.
-- [python-shamir-mnemonic](https://github.com/trezor/python-shamir-mnemonic) — the reference implementation, including the `vectors.json` test vectors.
+- [SLIP39](https://trezor.io/slip39) — Trezor's explainer: why split a backup into shares, and how it compares to BIP-39.
+- [Multi-share Backup on Trezor](https://trezor.io/guides/backups-recovery/advanced-wallets/multi-share-backup-on-trezor) — the same idea from the user's side.
+- [SLIP-0039: Shamir's Secret-Sharing for Mnemonic Codes](https://github.com/satoshilabs/slips/blob/master/slip-0039.md) — the specification: share format, RS1024 checksum, and encryption of the master secret.
+- [python-shamir-mnemonic](https://github.com/trezor/python-shamir-mnemonic) — the reference implementation, including the `vectors.json` test vectors this project is checked against.
+
+**Storing data on a YubiKey (WebAuthn largeBlob)**
+
+- [Web Authentication extensions § largeBlob](https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API/WebAuthn_extensions#largeblob) — MDN's description of the extension and its inputs and outputs.
+- [WebAuthn: Emulate authenticators](https://developer.chrome.com/docs/devtools/webauthn) — the DevTools panel used above, and [the CDP WebAuthn domain](https://chromedevtools.github.io/devtools-protocol/tot/WebAuthn/) behind it.
+- [FIDO2 large blobs](https://docs.yubico.com/yesdk/users-manual/application-fido2/large-blobs.html) — Yubico on the storage model and its ~1 KB budget.
+- [fido-largeblob-demos](https://github.com/YubicoLabs/fido-largeblob-demos) — Yubico's working examples.
+- [FIDO Specifics](https://docs.yubico.com/hardware/yubikey/yk-tech-manual/yk5-apps-fido.html) — the per-firmware extension table, and the source of the largeBlob version and capacity figures.
+- [WebAuthn Level 3 § Large blob storage extension](https://www.w3.org/TR/webauthn-3/#sctn-large-blob-extension) — the normative definition.
 
 **YubiKey**
 
 - [How the YubiKey Works](https://www.yubico.com/products/how-the-yubikey-works/) — what the device is and what the touch actually does.
-- [Setup](https://www.yubico.com/setup/) — Yubico's getting-started walkthrough if you've never used one.
-
-**Key derivation from a touch (WebAuthn PRF)**
-
-A PRF — pseudo-random function — returns a value that looks random for any given input, but always returns the same value for the same input. That is what lets a hardware key stand in for a stored password: feed it a salt, get back a repeatable 32 bytes, and derive an encryption key from them without the root secret ever leaving the device.
-
-- [Web Authentication extensions § prf](https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API/WebAuthn_extensions#prf) — MDN's short definition, framing the PRF as a random oracle and sketching the encryption use case.
-- [Hardware-Backed Key Derivation with WebAuthn PRF and the YubiKey](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/) — Yubico's explainer for what the extension buys you on real hardware.
-- [A Developer's Guide to Deriving Keys with WebAuthn PRF and YubiKeys](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/Developers_Guide_to_PRF.html) — the practical version: `navigator.credentials` calls, HKDF, key rotation, multi-device unlock.
-- [CTAP2 HMAC Secret Deep Dive](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/CTAP2_HMAC_Secret_Deep_Dive.html) — the `hmac-secret` layer underneath, including how the salt is domain-separated and a reference implementation in C against `libfido2`.
-- [WebAuthn Level 3 § Pseudo-random function extension](https://www.w3.org/TR/webauthn-3/#prf-extension) — the normative definition.
+- [Setup](https://www.yubico.com/setup/) — Yubico's getting-started walkthrough.
+- [YubiKey 5 firmware overview](https://docs.yubico.com/hardware/yubikey/yk-tech-manual/yk5-firmware-overview.html) — which firmware versions shipped on which products.
+- [Firmware 5.7 now available](https://www.yubico.com/blog/now-available-for-purchase-yubikey-5-series-and-security-key-series-with-new-5-7-firmware/) — the May 2024 retail announcement, and Yubico confirming firmware cannot be retrofitted.
 
 ## License
 

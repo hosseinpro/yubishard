@@ -1,1801 +1,3356 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YubiShard — split a wallet seed across YubiKeys</title>
-<style>
-:root {
-  --bg: #f5f5f2;
-  --panel: #ffffff;
-  --panel2: #faf9f7;
-  --text: #14161a;
-  --dim: #6c7280;
-  --line: rgba(0, 0, 0, .11);
-  --line2: rgba(0, 0, 0, .06);
-  --accent: oklch(0.52 0.16 253);
-  --accentSoft: oklch(0.95 0.03 253);
-  --accentText: #fff;
-  --ok: oklch(0.55 0.13 155);
-  --okSoft: oklch(0.95 0.04 155);
-  --warn: oklch(0.58 0.14 60);
-  --warnSoft: oklch(0.96 0.04 70);
-  --danger: oklch(0.55 0.17 25);
-  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px -12px rgba(0, 0, 0, .14);
-  --mono: ui-monospace, Menlo, monospace;
-}
-
-:root[data-dark] {
-  --bg: #0d0f12;
-  --panel: #15181d;
-  --panel2: #1b1f25;
-  --text: #e9ebee;
-  --dim: #949ba6;
-  --line: rgba(255, 255, 255, .12);
-  --line2: rgba(255, 255, 255, .06);
-  --accent: oklch(0.68 0.14 253);
-  --accentSoft: oklch(0.32 0.06 253);
-  --accentText: #0d0f12;
-  --ok: oklch(0.72 0.13 155);
-  --okSoft: oklch(0.30 0.06 155);
-  --warn: oklch(0.76 0.13 70);
-  --warnSoft: oklch(0.30 0.06 70);
-  --danger: oklch(0.68 0.16 25);
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
-}
-
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Helvetica Neue", Helvetica, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-input, textarea, button { font-family: inherit; color: inherit; }
-input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-
-.shell { min-height: 100vh; display: flex; flex-direction: column; }
-
-/* ---------- banner + header ---------- */
-
-.banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 24px;
-  background: var(--warnSoft);
-  border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
-}
-
-.banner-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); flex: none; }
-.banner a { margin-left: auto; font-weight: 600; white-space: nowrap; }
-
-.top {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
-.brand:hover { text-decoration: none; }
-
-.brand-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--accent);
-  color: var(--accentText);
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: -.02em;
-}
-
-.brand-name { font-weight: 700; font-size: 16.5px; letter-spacing: -.015em; }
-
-.tagline {
-  font-size: 12.5px;
-  color: var(--dim);
-  border-left: 1px solid var(--line);
-  padding-left: 18px;
-}
-
-.top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-
-.btn-ghost-sm {
-  font-size: 12.5px;
-  color: var(--dim);
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.btn-ghost-sm:hover { text-decoration: none; color: var(--text); }
-
-/* ---------- buttons ---------- */
-
-.btn {
-  cursor: pointer;
-  font-size: 14.5px;
-  font-weight: 600;
-  padding: 13px 26px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.btn:disabled { opacity: .45; cursor: default; }
-.btn-primary { background: var(--accent); color: var(--accentText); }
-.btn-outline { border-color: var(--line); padding: 13px 22px; }
-.btn-danger { border-color: var(--line); padding: 13px 22px; color: var(--danger); }
-.btn-mid { font-size: 14px; padding: 12px 22px; }
-
-.btn-small {
-  cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 7px 13px;
-  border-radius: 7px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.linkbtn {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font-size: 12.5px;
-  color: var(--accent);
-  text-decoration: underline;
-}
-
-.spinner {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, .35);
-  border-top-color: currentColor;
-  animation: spin .7s linear infinite;
-  flex: none;
-}
-
-/* ---------- home ---------- */
-
-.home {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 24px 26px;
-  gap: 16px;
-}
-
-.pill {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--accent);
-  background: var(--accentSoft);
-  padding: 5px 12px;
-  border-radius: 999px;
-}
-
-.hero {
-  margin: 0;
-  font-size: 44px;
-  line-height: 1.05;
-  font-weight: 700;
-  letter-spacing: -.035em;
-  text-align: center;
-  max-width: 800px;
-  text-wrap: balance;
-}
-
-.lede {
-  margin: -6px 0 0;
-  font-size: 15.5px;
-  line-height: 1.45;
-  color: var(--dim);
-  text-align: center;
-  max-width: 620px;
-  text-wrap: pretty;
-}
-
-.cta-row { display: flex; gap: 14px; }
-.cta-row .btn { font-size: 15px; padding: 12px 26px; }
-.cta-row .btn-outline { background: var(--panel); }
-
-.diagram {
-  width: 100%;
-  max-width: 960px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--panel);
-  padding: 20px 34px 16px;
-  box-shadow: var(--shadow);
-}
-
-.diagram-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.diagram-head span:last-child { font-size: 12.5px; color: var(--dim); font-weight: 400; }
-.diagram-body { display: flex; flex-direction: column; align-items: center; }
-
-.seedbox {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel2);
-  padding: 12px 18px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.ticks { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; width: 120px; }
-.ticks i { height: 6px; border-radius: 3px; background: var(--accent); opacity: .55; }
-.stem { width: 1.5px; height: 14px; background: var(--line); }
-.stem.short { height: 12px; }
-
-.split-pill {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-  background: var(--accentSoft);
-  color: var(--accent);
-  padding: 4px 10px;
-  border-radius: 999px;
-}
-
-.shards { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
-.shard { display: flex; flex-direction: column; align-items: center; }
-.rail { display: flex; width: 100%; height: 1.5px; }
-.rail i { flex: 1; background: var(--line); }
-.shard:first-child .rail i:first-child { background: transparent; }
-.shard:last-child .rail i:last-child { background: transparent; }
-
-.shard-card {
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--panel2);
-  padding: 12px;
-  width: calc(100% - 14px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.key-icon {
-  width: 15px;
-  height: 30px;
-  border-radius: 4px;
-  background: var(--accent);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.key-icon i { width: 7px; height: 7px; border-radius: 50%; background: var(--panel2); margin-bottom: 5px; }
-.shard-name { font-size: 12.5px; font-weight: 600; }
-.shard-place { font-size: 11.5px; color: var(--dim); }
-
-.shard-blob {
-  font: 10.5px/1.4 var(--mono);
-  color: var(--dim);
-  word-break: break-all;
-  text-align: center;
-}
-
-.diagram-foot {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line2);
-  width: 100%;
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--dim);
-}
-
-.diagram-foot b { color: var(--text); font-weight: 600; }
-
-/* ---------- flow shell ---------- */
-
-.flow { flex: 1; display: grid; grid-template-columns: 296px 1fr; align-items: start; }
-
-.side {
-  border-right: 1px solid var(--line);
-  padding: 30px 24px;
-  min-height: 100%;
-  background: var(--panel2);
-}
-
-.back-link {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font-size: 12.5px;
-  color: var(--dim);
-  margin-bottom: 22px;
-}
-
-.kicker {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--dim);
-}
-
-.flow-title { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-top: 6px; }
-.stepper { display: flex; flex-direction: column; margin-top: 24px; }
-
-.step {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 12px;
-  padding-bottom: 18px;
-  position: relative;
-}
-
-.step-rail { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-
-.step-dot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
-  flex: none;
-  border: 1.5px solid var(--line);
-  background: transparent;
-  color: var(--dim);
-}
-
-.step-line { flex: 1; width: 1.5px; background: var(--line); min-height: 10px; }
-.step-body { padding-top: 2px; }
-.step-title { font-size: 13.5px; font-weight: 600; color: var(--dim); line-height: 1.35; }
-.step-note { font-size: 12.5px; color: var(--dim); line-height: 1.45; margin-top: 3px; }
-
-.step.is-done .step-dot { border-color: var(--ok); background: var(--ok); color: var(--accentText); }
-.step.is-done .step-line { background: var(--ok); }
-.step.is-done .step-title { color: var(--text); }
-.step.is-active .step-dot { border-color: var(--accent); background: var(--accent); color: var(--accentText); }
-.step.is-active .step-title { color: var(--text); }
-
-.stage { padding: 44px 48px 80px; max-width: 860px; }
-.panel:not([hidden]) { animation: fade .25s ease; }
-.title { margin: 0; font-size: 31px; font-weight: 700; letter-spacing: -.025em; }
-
-.sub {
-  margin: 12px 0 0;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--dim);
-  max-width: 620px;
-  text-wrap: pretty;
-}
-
-.actions { display: flex; align-items: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
-.note { font-size: 13px; color: var(--dim); }
-.mono { font-family: var(--mono); color: var(--text); font-weight: 600; }
-
-.card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 26px;
-  margin-top: 26px;
-}
-
-/* ---------- seed grid ---------- */
-
-.wordbar { display: flex; gap: 8px; margin: 26px 0 18px; }
-
-.chip {
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--dim);
-}
-
-.chip.is-on { border-color: var(--accent); background: var(--accentSoft); color: var(--accent); }
-.wordbar .note { margin-left: auto; align-self: center; font-size: 12.5px; }
-
-.wordgrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 18px;
-}
-
-.wordgrid.cols-4 { grid-template-columns: repeat(4, 1fr); }
-
-.word {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
-  height: 40px;
-  background: var(--panel2);
-}
-
-.word-n { font: 600 11px var(--mono); color: var(--dim); width: 16px; text-align: right; flex: none; }
-.word input { border: 0; background: transparent; font-size: 14px; width: 100%; padding: 0; }
-.word span.value { font-size: 14px; }
-
-/* ---------- split ---------- */
-
-.slider-head { display: flex; align-items: baseline; justify-content: space-between; }
-.slider-head.spaced { margin-top: 26px; }
-.slider-head span:first-child { font-size: 14px; font-weight: 600; }
-.slider-head span:last-child { font: 700 22px var(--mono); }
-input[type=range] { width: 100%; margin: 10px 0 0; accent-color: var(--accent); }
-.viz-row { display: flex; gap: 8px; margin-top: 30px; flex-wrap: wrap; }
-
-.viz {
-  width: 56px;
-  height: 74px;
-  border-radius: 9px;
-  border: 1.5px solid var(--line);
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-
-.viz i { width: 12px; height: 16px; border-radius: 2px; background: var(--line); }
-.viz span { font: 600 11px var(--mono); color: var(--dim); }
-.viz.is-needed { border-color: var(--accent); background: var(--accentSoft); }
-.viz.is-needed i { background: var(--accent); }
-.viz.is-needed span { color: var(--accent); }
-.split-sentence { margin: 20px 0 0; font-size: 14.5px; line-height: 1.6; max-width: 560px; }
-.split-note { margin: 6px 0 0; font-size: 13px; color: var(--dim); }
-
-/* ---------- share rows (encrypt + unlock) ---------- */
-
-.rows { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
-
-.row {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel2);
-  padding: 14px 18px;
-}
-
-.row.is-active { border-color: var(--accent); background: var(--panel); padding: 18px; }
-.row.is-done { padding: 18px; }
-.row-head { display: flex; align-items: center; gap: 12px; }
-
-.row-dot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  font: 700 12px var(--mono);
-  flex: none;
-  border: 1.5px solid var(--line);
-  background: transparent;
-  color: var(--dim);
-}
-
-.row.is-active .row-dot { border-color: var(--accent); background: var(--accent); color: var(--accentText); }
-.row.is-done .row-dot { border-color: var(--ok); background: var(--ok); color: var(--accentText); }
-.row-title { font-size: 15px; font-weight: 600; }
-.row-sub { font-size: 13px; color: var(--dim); }
-
-.status {
-  margin-left: auto;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 9px;
-  border-radius: 6px;
-  color: var(--dim);
-  background: var(--line2);
-}
-
-.status.ok { color: var(--ok); background: var(--okSoft); }
-.status.active { color: var(--accent); background: var(--accentSoft); }
-.field-grid { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-size: 13px; font-weight: 600; }
-.field-label span { color: var(--dim); font-weight: 400; }
-.field-help { font-size: 12px; color: var(--dim); }
-
-.text {
-  height: 40px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  padding: 0 12px;
-  font-size: 14px;
-  width: 100%;
-}
-
-.blobbox {
-  font: 12.5px/1.6 var(--mono);
-  background: var(--panel2);
-  border: 1px solid var(--line2);
-  border-radius: 9px;
-  padding: 12px 14px;
-  word-break: break-all;
-  max-height: 112px;
-  overflow: auto;
-}
-
-.row-done { margin-top: 14px; }
-.blob-actions { display: flex; gap: 8px; margin-top: 10px; }
-.unlock-body { margin-top: 16px; display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-.unlock-body .field { flex: 1; min-width: 260px; }
-.err-line { font-size: 13px; color: var(--danger); margin-top: 10px; }
-
-/* ---------- verify + collect ---------- */
-
-.vrow {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  padding: 18px;
-}
-
-.vrow-title { font-size: 13.5px; font-weight: 600; margin-bottom: 10px; }
-
-.blobinput {
-  width: 100%;
-  min-height: 64px;
-  resize: vertical;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel2);
-  padding: 10px 12px;
-  font: 12.5px/1.5 var(--mono);
-}
-
-.vrow .text { margin-top: 10px; background: var(--panel2); height: 38px; font-size: 13.5px; }
-.result { font-size: 13.5px; font-weight: 600; }
-.result.ok { color: var(--ok); }
-.result.err { color: var(--danger); }
-.crow { padding: 16px; }
-.crow.is-bad { border-color: var(--danger); }
-.crow .blobinput { min-height: 60px; }
-.crow-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.crow-head span:first-child { font-size: 13.5px; font-weight: 600; }
-.hint { font-size: 12.5px; }
-.hint.ok { color: var(--ok); }
-.hint.err { color: var(--danger); }
-
-/* ---------- done + restored ---------- */
-
-.badge-ok {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ok);
-  background: var(--okSoft);
-  padding: 6px 12px;
-  border-radius: 999px;
-}
-
-.badge-ok + .title { margin-top: 18px; }
-.done-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 26px; }
-
-.done-card {
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--panel);
-  padding: 16px;
-}
-
-.done-head { display: flex; align-items: center; gap: 9px; }
-.done-num { font: 700 12px var(--mono); color: var(--dim); }
-.done-label { font-size: 14px; font-weight: 600; }
-
-.done-blob {
-  font: 11.5px/1.5 var(--mono);
-  color: var(--dim);
-  margin-top: 8px;
-  word-break: break-all;
-  max-height: 54px;
-  overflow: hidden;
-}
-
-.done-card .blob-actions { margin-top: 12px; }
-.done-card .btn-small { background: var(--panel2); padding: 6px 12px; }
-
-.reveal-wrap {
-  position: relative;
-  margin-top: 24px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.words-out { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.words-out.cols-4 { grid-template-columns: repeat(4, 1fr); }
-.words-out.is-hidden { filter: blur(7px); }
-
-/* ---------- footer ---------- */
-
-.foot {
-  border-top: 1px solid var(--line);
-  padding: 12px 24px;
-  display: flex;
-  gap: 18px;
-  font-size: 12.5px;
-  color: var(--dim);
-  background: var(--panel);
-  flex-wrap: wrap;
-}
-
-.foot .right { margin-left: auto; }
-
-@media (max-width: 860px) {
-  .flow { grid-template-columns: 1fr; }
-  .side { border-right: 0; border-bottom: 1px solid var(--line); min-height: 0; }
-  .stage { padding: 28px 20px 60px; }
-  .field-grid, .done-grid { grid-template-columns: 1fr; }
-  .hero { font-size: 34px; }
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YubiShard — split a wallet seed across YubiKeys</title>
+  <style>
+    :root {
+      --bg: #f5f5f2;
+      --panel: #ffffff;
+      --panel2: #faf9f7;
+      --text: #14161a;
+      --dim: #6c7280;
+      --line: rgba(0, 0, 0, .11);
+      --line2: rgba(0, 0, 0, .06);
+      --accent: oklch(0.52 0.16 253);
+      --accentSoft: oklch(0.95 0.03 253);
+      --accentText: #fff;
+      --ok: oklch(0.55 0.13 155);
+      --okSoft: oklch(0.95 0.04 155);
+      --warn: oklch(0.58 0.14 60);
+      --warnSoft: oklch(0.96 0.04 70);
+      --danger: oklch(0.55 0.17 25);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px -12px rgba(0, 0, 0, .14);
+      --mono: ui-monospace, Menlo, monospace;
+    }
+
+    :root[data-dark] {
+      --bg: #0d0f12;
+      --panel: #15181d;
+      --panel2: #1b1f25;
+      --text: #e9ebee;
+      --dim: #949ba6;
+      --line: rgba(255, 255, 255, .12);
+      --line2: rgba(255, 255, 255, .06);
+      --accent: oklch(0.68 0.14 253);
+      --accentSoft: oklch(0.32 0.06 253);
+      --accentText: #0d0f12;
+      --ok: oklch(0.72 0.13 155);
+      --okSoft: oklch(0.30 0.06 155);
+      --warn: oklch(0.76 0.13 70);
+      --warnSoft: oklch(0.30 0.06 70);
+      --danger: oklch(0.68 0.16 25);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Helvetica Neue", Helvetica, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    input,
+    textarea,
+    button {
+      font-family: inherit;
+      color: inherit;
+    }
+
+    input:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes fade {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---------- banner + header ---------- */
+
+    .banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 24px;
+      background: var(--warnSoft);
+      border-bottom: 1px solid var(--line);
+      font-size: 12.5px;
+    }
+
+    .banner-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--warn);
+      flex: none;
+    }
+
+    .banner a {
+      margin-left: auto;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+    }
+
+    .brand:hover {
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      background: var(--accent);
+      color: var(--accentText);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: -.02em;
+    }
+
+    .brand-name {
+      font-weight: 700;
+      font-size: 16.5px;
+      letter-spacing: -.015em;
+    }
+
+    .tagline {
+      font-size: 12.5px;
+      color: var(--dim);
+      border-left: 1px solid var(--line);
+      padding-left: 18px;
+    }
+
+    .top-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-ghost-sm {
+      font-size: 12.5px;
+      color: var(--dim);
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .btn-ghost-sm:hover {
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    /* ---------- buttons ---------- */
+
+    .btn {
+      cursor: pointer;
+      font-size: 14.5px;
+      font-weight: 600;
+      padding: 13px 26px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .btn:disabled {
+      opacity: .45;
+      cursor: default;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accentText);
+    }
+
+    .btn-outline {
+      border-color: var(--line);
+      padding: 13px 22px;
+    }
+
+    .btn-danger {
+      border-color: var(--line);
+      padding: 13px 22px;
+      color: var(--danger);
+    }
+
+    .btn-mid {
+      font-size: 14px;
+      padding: 12px 22px;
+    }
+
+    .btn-small {
+      cursor: pointer;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 7px 13px;
+      border-radius: 7px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .linkbtn {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      font-size: 12.5px;
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    .spinner {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, .35);
+      border-top-color: currentColor;
+      animation: spin .7s linear infinite;
+      flex: none;
+    }
+
+    /* ---------- home ---------- */
+
+    .home {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 24px 26px;
+      gap: 16px;
+    }
+
+    .pill {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accentSoft);
+      padding: 5px 12px;
+      border-radius: 999px;
+    }
+
+    .hero {
+      margin: 0;
+      font-size: 44px;
+      line-height: 1.05;
+      font-weight: 700;
+      letter-spacing: -.035em;
+      text-align: center;
+      max-width: 800px;
+      text-wrap: balance;
+    }
+
+    .lede {
+      margin: -6px 0 0;
+      font-size: 15.5px;
+      line-height: 1.45;
+      color: var(--dim);
+      text-align: center;
+      max-width: 620px;
+      text-wrap: pretty;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 14px;
+    }
+
+    .cta-row .btn {
+      font-size: 15px;
+      padding: 12px 26px;
+    }
+
+    .cta-row .btn-outline {
+      background: var(--panel);
+    }
+
+    .diagram {
+      width: 100%;
+      max-width: 960px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      padding: 20px 34px 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .diagram-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .diagram-head span:last-child {
+      font-size: 12.5px;
+      color: var(--dim);
+      font-weight: 400;
+    }
+
+    .diagram-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .seedbox {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel2);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .ticks {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px;
+      width: 120px;
+    }
+
+    .ticks i {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--accent);
+      opacity: .55;
+    }
+
+    .stem {
+      width: 1.5px;
+      height: 14px;
+      background: var(--line);
+    }
+
+    .stem.short {
+      height: 12px;
+    }
+
+    .split-pill {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      background: var(--accentSoft);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+
+    .shards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      width: 100%;
+    }
+
+    .shard {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .rail {
+      display: flex;
+      width: 100%;
+      height: 1.5px;
+    }
+
+    .rail i {
+      flex: 1;
+      background: var(--line);
+    }
+
+    .shard:first-child .rail i:first-child {
+      background: transparent;
+    }
+
+    .shard:last-child .rail i:last-child {
+      background: transparent;
+    }
+
+    .shard-card {
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--panel2);
+      padding: 12px;
+      width: calc(100% - 14px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .key-icon {
+      width: 15px;
+      height: 30px;
+      border-radius: 4px;
+      background: var(--accent);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .key-icon i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--panel2);
+      margin-bottom: 5px;
+    }
+
+    .shard-name {
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    .shard-place {
+      font-size: 11.5px;
+      color: var(--dim);
+    }
+
+    .shard-blob {
+      font: 10.5px/1.4 var(--mono);
+      color: var(--dim);
+      word-break: break-all;
+      text-align: center;
+    }
+
+    .diagram-foot {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line2);
+      width: 100%;
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--dim);
+    }
+
+    .diagram-foot b {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    /* ---------- flow shell ---------- */
+
+    .flow {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 296px 1fr;
+      align-items: start;
+    }
+
+    .side {
+      border-right: 1px solid var(--line);
+      padding: 30px 24px;
+      min-height: 100%;
+      background: var(--panel2);
+    }
+
+    .back-link {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      font-size: 12.5px;
+      color: var(--dim);
+      margin-bottom: 22px;
+    }
+
+    .kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    .flow-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      margin-top: 6px;
+    }
+
+    .stepper {
+      display: flex;
+      flex-direction: column;
+      margin-top: 24px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 12px;
+      padding-bottom: 18px;
+      position: relative;
+    }
+
+    .step-rail {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .step-dot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      flex: none;
+      border: 1.5px solid var(--line);
+      background: transparent;
+      color: var(--dim);
+    }
+
+    .step-line {
+      flex: 1;
+      width: 1.5px;
+      background: var(--line);
+      min-height: 10px;
+    }
+
+    .step-body {
+      padding-top: 2px;
+    }
+
+    .step-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--dim);
+      line-height: 1.35;
+    }
+
+    .step-note {
+      font-size: 12.5px;
+      color: var(--dim);
+      line-height: 1.45;
+      margin-top: 3px;
+    }
+
+    .step.is-done .step-dot {
+      border-color: var(--ok);
+      background: var(--ok);
+      color: var(--accentText);
+    }
+
+    .step.is-done .step-line {
+      background: var(--ok);
+    }
+
+    .step.is-done .step-title {
+      color: var(--text);
+    }
+
+    .step.is-active .step-dot {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accentText);
+    }
+
+    .step.is-active .step-title {
+      color: var(--text);
+    }
+
+    .stage {
+      padding: 44px 48px 80px;
+      max-width: 860px;
+    }
+
+    .panel:not([hidden]) {
+      animation: fade .25s ease;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 31px;
+      font-weight: 700;
+      letter-spacing: -.025em;
+    }
+
+    .sub {
+      margin: 12px 0 0;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--dim);
+      max-width: 620px;
+      text-wrap: pretty;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 22px;
+      flex-wrap: wrap;
+    }
+
+    .note {
+      font-size: 13px;
+      color: var(--dim);
+    }
+
+    .mono {
+      font-family: var(--mono);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 26px;
+      margin-top: 26px;
+    }
+
+    /* ---------- seed grid ---------- */
+
+    .wordbar {
+      display: flex;
+      gap: 8px;
+      margin: 26px 0 18px;
+    }
+
+    .chip {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--dim);
+    }
+
+    .chip.is-on {
+      border-color: var(--accent);
+      background: var(--accentSoft);
+      color: var(--accent);
+    }
+
+    .wordbar .note {
+      margin-left: auto;
+      align-self: center;
+      font-size: 12.5px;
+    }
+
+    .wordgrid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .wordgrid.cols-4 {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .word {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 10px;
+      height: 40px;
+      background: var(--panel2);
+    }
+
+    .word-n {
+      font: 600 11px var(--mono);
+      color: var(--dim);
+      width: 16px;
+      text-align: right;
+      flex: none;
+    }
+
+    .word input {
+      border: 0;
+      background: transparent;
+      font-size: 14px;
+      width: 100%;
+      padding: 0;
+    }
+
+    .word span.value {
+      font-size: 14px;
+    }
+
+    /* ---------- split ---------- */
+
+    .slider-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .slider-head.spaced {
+      margin-top: 26px;
+    }
+
+    .slider-head span:first-child {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .slider-head span:last-child {
+      font: 700 22px var(--mono);
+    }
+
+    input[type=range] {
+      width: 100%;
+      margin: 10px 0 0;
+      accent-color: var(--accent);
+    }
+
+    .viz-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+
+    .viz {
+      width: 56px;
+      height: 74px;
+      border-radius: 9px;
+      border: 1.5px solid var(--line);
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .viz i {
+      width: 12px;
+      height: 16px;
+      border-radius: 2px;
+      background: var(--line);
+    }
+
+    .viz span {
+      font: 600 11px var(--mono);
+      color: var(--dim);
+    }
+
+    .viz.is-needed {
+      border-color: var(--accent);
+      background: var(--accentSoft);
+    }
+
+    .viz.is-needed i {
+      background: var(--accent);
+    }
+
+    .viz.is-needed span {
+      color: var(--accent);
+    }
+
+    .split-sentence {
+      margin: 20px 0 0;
+      font-size: 14.5px;
+      line-height: 1.6;
+      max-width: 560px;
+    }
+
+    .split-note {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: var(--dim);
+    }
+
+    /* ---------- share rows (encrypt + unlock) ---------- */
+
+    .rows {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    .row {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel2);
+      padding: 14px 18px;
+    }
+
+    .row.is-active {
+      border-color: var(--accent);
+      background: var(--panel);
+      padding: 18px;
+    }
+
+    .row.is-done {
+      padding: 18px;
+    }
+
+    .row-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .row-dot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      font: 700 12px var(--mono);
+      flex: none;
+      border: 1.5px solid var(--line);
+      background: transparent;
+      color: var(--dim);
+    }
+
+    .row.is-active .row-dot {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accentText);
+    }
+
+    .row.is-done .row-dot {
+      border-color: var(--ok);
+      background: var(--ok);
+      color: var(--accentText);
+    }
+
+    .row-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .row-sub {
+      font-size: 13px;
+      color: var(--dim);
+    }
+
+    .status {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 6px;
+      color: var(--dim);
+      background: var(--line2);
+    }
+
+    .status.ok {
+      color: var(--ok);
+      background: var(--okSoft);
+    }
+
+    .status.active {
+      color: var(--accent);
+      background: var(--accentSoft);
+    }
+
+    .field-grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-label {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .field-label span {
+      color: var(--dim);
+      font-weight: 400;
+    }
+
+    .field-help {
+      font-size: 12px;
+      color: var(--dim);
+    }
+
+    .text {
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 0 12px;
+      font-size: 14px;
+      width: 100%;
+    }
+
+    .blobbox {
+      font: 12.5px/1.6 var(--mono);
+      background: var(--panel2);
+      border: 1px solid var(--line2);
+      border-radius: 9px;
+      padding: 12px 14px;
+      word-break: break-all;
+      max-height: 112px;
+      overflow: auto;
+    }
+
+    .row-done {
+      margin-top: 14px;
+    }
+
+    .blob-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .unlock-body {
+      margin-top: 16px;
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .unlock-body .field {
+      flex: 1;
+      min-width: 260px;
+    }
+
+    .err-line {
+      font-size: 13px;
+      color: var(--danger);
+      margin-top: 10px;
+    }
+
+    /* ---------- environment notice ---------- */
+
+    .env-note {
+      margin: 0 24px 18px;
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--warn);
+      border-radius: 10px;
+      background: var(--panel);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--dim);
+    }
+
+    .env-note b {
+      color: var(--text);
+    }
+
+    .env-note.is-blocked {
+      border-left-color: var(--danger);
+    }
+
+    .env-note code,
+    .banner code {
+      font: 12px var(--mono);
+      background: var(--bg);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* ---------- verify + collect ---------- */
+
+    .vrow {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      padding: 18px;
+    }
+
+    .vrow-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .blobinput {
+      width: 100%;
+      min-height: 64px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel2);
+      padding: 10px 12px;
+      font: 12.5px/1.5 var(--mono);
+    }
+
+    .vrow .text {
+      margin-top: 10px;
+      background: var(--panel2);
+      height: 38px;
+      font-size: 13.5px;
+    }
+
+    .result {
+      font-size: 13.5px;
+      font-weight: 600;
+    }
+
+    .result.ok {
+      color: var(--ok);
+    }
+
+    .result.err {
+      color: var(--danger);
+    }
+
+    .crow {
+      padding: 16px;
+    }
+
+    .crow.is-bad {
+      border-color: var(--danger);
+    }
+
+    .crow .blobinput {
+      min-height: 60px;
+    }
+
+    .crow-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .crow-head span:first-child {
+      font-size: 13.5px;
+      font-weight: 600;
+    }
+
+    .hint {
+      font-size: 12.5px;
+    }
+
+    .hint.ok {
+      color: var(--ok);
+    }
+
+    .hint.err {
+      color: var(--danger);
+    }
+
+    /* ---------- done + restored ---------- */
+
+    .badge-ok {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ok);
+      background: var(--okSoft);
+      padding: 6px 12px;
+      border-radius: 999px;
+    }
+
+    .badge-ok+.title {
+      margin-top: 18px;
+    }
+
+    .done-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 26px;
+    }
+
+    .done-card {
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    .done-head {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .done-num {
+      font: 700 12px var(--mono);
+      color: var(--dim);
+    }
+
+    .done-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .done-blob {
+      font: 11.5px/1.5 var(--mono);
+      color: var(--dim);
+      margin-top: 8px;
+      word-break: break-all;
+      max-height: 54px;
+      overflow: hidden;
+    }
+
+    .done-card .blob-actions {
+      margin-top: 12px;
+    }
+
+    .done-card .btn-small {
+      background: var(--panel2);
+      padding: 6px 12px;
+    }
+
+    .reveal-wrap {
+      position: relative;
+      margin-top: 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .words-out {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .words-out.cols-4 {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .words-out.is-hidden {
+      filter: blur(7px);
+    }
+
+    /* ---------- footer ---------- */
+
+    .foot {
+      border-top: 1px solid var(--line);
+      padding: 12px 24px;
+      display: flex;
+      gap: 18px;
+      font-size: 12.5px;
+      color: var(--dim);
+      background: var(--panel);
+      flex-wrap: wrap;
+    }
+
+    .foot .right {
+      margin-left: auto;
+    }
+
+    @media (max-width: 860px) {
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      .side {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        min-height: 0;
+      }
+
+      .stage {
+        padding: 28px 20px 60px;
+      }
+
+      .field-grid,
+      .done-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        font-size: 34px;
+      }
+    }
+  </style>
 </head>
+
 <body>
 
-<div class="shell">
+  <div class="shell">
 
-<div class="banner">
-  <span class="banner-dot"></span>
-  <span>For real backups, download YubiShard and run it offline on a machine with no network.
-    Nothing you type here ever leaves your browser.</span>
-  <a href="index.html" download="yubishard.html">Download for offline use →</a>
-</div>
-
-<header class="top">
-  <a href="#" class="brand" data-act="home">
-    <span class="brand-mark">YS</span>
-    <span class="brand-name">YubiShard</span>
-  </a>
-  <span class="tagline">Split a wallet seed across YubiKeys</span>
-  <div class="top-actions">
-    <a class="btn-ghost-sm" href="https://github.com/hosseinpro/yubishard" target="_blank"
-      rel="noopener">GitHub</a>
-    <button class="btn-ghost-sm" data-act="theme" id="theme-btn">Dark</button>
-  </div>
-</header>
-
-<!-- ================= home ================= -->
-
-<main class="home" id="home">
-  <span class="pill">Free · open source · runs offline</span>
-  <h1 class="hero">No single key holds your seed.</h1>
-  <p class="lede">Split your recovery phrase into shares, encrypt each with a different YubiKey, and
-    store them apart.</p>
-  <div class="cta-row">
-    <button class="btn btn-primary" data-act="backup">Back up a seed</button>
-    <button class="btn btn-outline" data-act="restore">Restore a seed</button>
-  </div>
-
-  <div class="diagram">
-    <div class="diagram-head">
-      <span>How a 2-of-3 backup is built</span>
-      <span>Nothing readable exists in any single place</span>
+    <div class="banner" id="dl-banner">
+      <span class="banner-dot"></span>
+      <span>For real backups, run YubiShard from your own machine: download the folder and start
+        <code>serve.command</code> (macOS) or <code>serve.bat</code> (Windows). A security key needs a
+        real web address, so opening the file directly will not work.</span>
+      <a href="https://github.com/hosseinpro/yubishard/archive/refs/heads/main.zip">Download →</a>
     </div>
-    <div class="diagram-body">
-      <div class="seedbox">
-        <span>Your seed phrase</span>
-        <span class="ticks">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </span>
+
+    <header class="top">
+      <a href="#" class="brand" data-act="home">
+        <span class="brand-mark">YS</span>
+        <span class="brand-name">YubiShard</span>
+      </a>
+      <span class="tagline">Split a wallet seed across YubiKeys</span>
+      <div class="top-actions">
+        <a class="btn-ghost-sm" href="https://github.com/hosseinpro/yubishard" target="_blank" rel="noopener">GitHub</a>
+        <button class="btn-ghost-sm" data-act="theme" id="theme-btn">Dark</button>
       </div>
-      <span class="stem"></span>
-      <span class="split-pill">Shamir split · 2 of 3</span>
-      <span class="stem short"></span>
-      <div class="shards">
-        <div class="shard">
-          <span class="rail"><i></i><i></i></span>
+    </header>
+
+    <div class="env-note" id="env-banner" hidden></div>
+
+    <!-- ================= home ================= -->
+
+    <main class="home" id="home">
+      <span class="pill">Free · open source · runs offline</span>
+      <h1 class="hero">No single key holds your seed.</h1>
+      <p class="lede">Split your recovery phrase into standard SLIP-39 shares, store each one on a
+        different YubiKey, and keep them apart.</p>
+      <div class="cta-row">
+        <button class="btn btn-primary" data-act="backup">Back up a seed</button>
+        <button class="btn btn-outline" data-act="restore">Restore a seed</button>
+      </div>
+
+      <div class="diagram">
+        <div class="diagram-head">
+          <span>How a 2-of-3 backup is built</span>
+          <span>Nothing readable exists in any single place</span>
+        </div>
+        <div class="diagram-body">
+          <div class="seedbox">
+            <span>Your seed phrase</span>
+            <span class="ticks">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </span>
+          </div>
           <span class="stem"></span>
-          <div class="shard-card">
-            <span class="key-icon"><i></i></span>
-            <span class="shard-name">YubiKey 1</span>
-            <span class="shard-place">Home safe</span>
-            <span class="shard-blob">YS1.2.aG9tZQ.8f4c1a…</span>
+          <span class="split-pill">split · 2 of 3</span>
+          <span class="stem short"></span>
+          <div class="shards">
+            <div class="shard">
+              <span class="rail"><i></i><i></i></span>
+              <span class="stem"></span>
+              <div class="shard-card">
+                <span class="key-icon"><i></i></span>
+                <span class="shard-name">YubiKey 1</span>
+                <span class="shard-place">Home safe</span>
+                <span class="shard-blob">glimpse helpful academic acid…</span>
+              </div>
+            </div>
+            <div class="shard">
+              <span class="rail"><i></i><i></i></span>
+              <span class="stem"></span>
+              <div class="shard-card">
+                <span class="key-icon"><i></i></span>
+                <span class="shard-name">YubiKey 2</span>
+                <span class="shard-place">Office drawer</span>
+                <span class="shard-blob">glimpse helpful academic agency…</span>
+              </div>
+            </div>
+            <div class="shard">
+              <span class="rail"><i></i><i></i></span>
+              <span class="stem"></span>
+              <div class="shard-card">
+                <span class="key-icon"><i></i></span>
+                <span class="shard-name">YubiKey 3</span>
+                <span class="shard-place">Bank vault</span>
+                <span class="shard-blob">glimpse helpful academic always…</span>
+              </div>
+            </div>
+          </div>
+          <div class="diagram-foot">Any <b>2 of the 3</b> keys rebuild the phrase · any single one
+            reveals nothing</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ================= flow ================= -->
+
+    <main class="flow" id="flow" hidden>
+      <nav class="side">
+        <button class="back-link" data-act="home">← All tools</button>
+        <div class="kicker" id="flow-kicker">Backup</div>
+        <div class="flow-title" id="flow-title">Split and seal</div>
+        <div class="stepper" id="stepper"></div>
+      </nav>
+
+      <section class="stage">
+
+        <!-- step: enter seed -->
+        <div class="panel" id="p-seed" hidden>
+          <h2 class="title">Enter your recovery phrase</h2>
+          <p class="sub">Paste it into any box and the rest fill in automatically. It stays in this tab's
+            memory only — never saved, never sent.</p>
+          <div class="wordbar">
+            <button class="chip" id="chip12" data-act="count12">12 words</button>
+            <button class="chip" id="chip20" data-act="count20">20 words</button>
+            <button class="chip" id="chip24" data-act="count24">24 words</button>
+            <span class="note" id="std-hint"></span>
+            <span class="note" id="word-progress"></span>
+          </div>
+          <div class="wordgrid" id="wordgrid"></div>
+          <div class="card" style="margin-top:16px">
+            <label class="field">
+              <span class="field-label">Passphrase <span>(optional)</span></span>
+              <input class="text" type="password" id="input-pass" data-act="inputpass"
+                placeholder="Leave empty if you never set one">
+              <span class="field-help" id="pass-help"></span>
+            </label>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" id="seed-next" data-act="seed-next">Continue</button>
+            <span class="note" id="seed-fp-wrap" hidden>Wallet fingerprint
+              <span class="mono" id="seed-fp"></span> — write it down; a restore must show the same</span>
+            <span class="note" id="seed-blocked">Fill in every word to continue</span>
+          </div>
+          <div class="err-line" id="seed-err" hidden></div>
+          <div style="margin-top:18px">
+            <button class="linkbtn" data-act="demo">Fill with a throwaway test phrase</button>
           </div>
         </div>
-        <div class="shard">
-          <span class="rail"><i></i><i></i></span>
-          <span class="stem"></span>
-          <div class="shard-card">
-            <span class="key-icon"><i></i></span>
-            <span class="shard-name">YubiKey 2</span>
-            <span class="shard-place">Office drawer</span>
-            <span class="shard-blob">YS1.2.b2ZmaWNl.2b90d7…</span>
+
+        <!-- step: split settings -->
+        <div class="panel" id="p-split" hidden>
+          <h2 class="title">Choose how to split it</h2>
+          <p class="sub">More shares means more places to lose one safely. A lower threshold means an
+            easier recovery — and an easier theft.</p>
+          <div class="card">
+            <div class="slider-head"><span>Total shares</span><span id="n-val">5</span></div>
+            <input type="range" min="1" max="10" step="1" id="n-range" data-act="n">
+            <div class="slider-head spaced"><span>Needed to restore</span><span id="m-val">3</span></div>
+            <input type="range" min="1" max="10" step="1" id="m-range" data-act="m">
+            <div class="viz-row" id="viz"></div>
+            <p class="split-sentence" id="split-sentence"></p>
+            <p class="split-note" id="split-note"></p>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" id="split-next" data-act="split-next">Split</button>
+            <button class="btn btn-outline" data-act="back">Back</button>
           </div>
         </div>
-        <div class="shard">
-          <span class="rail"><i></i><i></i></span>
-          <span class="stem"></span>
-          <div class="shard-card">
-            <span class="key-icon"><i></i></span>
-            <span class="shard-name">YubiKey 3</span>
-            <span class="shard-place">Bank vault</span>
-            <span class="shard-blob">YS1.2.dmF1bHQ.c517e3…</span>
+
+        <!-- step: write each share onto a key -->
+        <div class="panel" id="p-encrypt" hidden>
+          <h2 class="title">Write each share to a YubiKey</h2>
+          <p class="sub">Plug in one key, name it, and write its share. Chrome will ask for the key's PIN
+            and a touch twice — once to create the credential, once to store the share.</p>
+          <div class="card">
+            <p class="split-note" id="pin-note"></p>
+          </div>
+          <div class="rows" id="enc-rows"></div>
+          <div class="actions" id="to-verify-wrap" hidden>
+            <button class="btn btn-primary" data-act="to-verify">Verify the backup →</button>
           </div>
         </div>
-      </div>
-      <div class="diagram-foot">Any <b>2 of the 3</b> keys rebuild the phrase · any single one
-        reveals nothing</div>
-    </div>
+
+        <!-- step: verify -->
+        <div class="panel" id="p-verify" hidden>
+          <h2 class="title">Prove it restores</h2>
+          <p class="sub" id="verify-sub"></p>
+          <div class="rows" id="verify-rows"></div>
+          <div class="actions">
+            <button class="btn btn-primary" id="verify-btn" data-act="verify-read">
+              <span class="spinner" id="verify-spin" hidden></span>
+              <span id="verify-btn-text">Read a YubiKey</span>
+            </button>
+            <span class="result" id="verify-msg"></span>
+          </div>
+        </div>
+
+        <!-- step: done -->
+        <div class="panel" id="p-done" hidden>
+          <div class="badge-ok" id="done-badge"></div>
+          <h2 class="title">Your backup is ready</h2>
+          <p class="sub">Store the keys in different places. Wallet fingerprint
+            <span class="mono" id="done-fp"></span> — write it down; a future restore must show the
+            same.
+          </p>
+          <div class="card">
+            <p class="split-note" id="recovery-note"></p>
+          </div>
+          <div class="done-grid" id="done-grid"></div>
+          <div class="actions">
+            <button class="btn btn-danger" data-act="wipe">Wipe this session</button>
+          </div>
+        </div>
+
+        <!-- step: read shares back off the keys -->
+        <div class="panel" id="p-collect" hidden>
+          <h2 class="title">Read your YubiKeys</h2>
+          <p class="sub">Plug in one key at a time and read its share. The threshold is stored with the
+            first share you read, so you will be told how many more you need.</p>
+          <div class="rows" id="collect-rows"></div>
+          <div class="actions">
+            <button class="btn btn-primary" id="read-btn" data-act="read-key">
+              <span class="spinner" id="read-spin" hidden></span>
+              <span id="read-btn-text">Read a YubiKey</span>
+            </button>
+            <span class="note" id="collect-hint"></span>
+          </div>
+          <div class="err-line" id="read-err" hidden></div>
+          <div style="margin-top:18px">
+            <button class="linkbtn" data-act="toggle-paste">Advanced — paste share words instead</button>
+            <div id="paste-wrap" hidden>
+              <p class="split-note">Only useful if you pulled a share off a key some other way, for
+                example with python-fido2. Normally the keys hold everything you need.</p>
+              <div class="rows" id="paste-rows"></div>
+              <div class="actions">
+                <button class="btn btn-outline" data-act="paste-combine">Rebuild from pasted
+                  shares</button>
+                <button class="btn-small" data-act="paste-more">Add another box</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- step: restored -->
+        <div class="panel" id="p-restored" hidden>
+          <div class="badge-ok">Seed reconstructed</div>
+          <h2 class="title">Here is your recovery phrase</h2>
+          <p class="sub"><span id="restored-kind"></span> · wallet fingerprint
+            <span class="mono" id="restored-fp"></span>. It must match the one you recorded at backup.
+            Close this tab as soon as you have what you need.
+          </p>
+          <div class="reveal-wrap">
+            <div class="words-out is-hidden" id="words-out"></div>
+          </div>
+          <p class="split-note" id="restored-alt" hidden></p>
+          <div class="actions">
+            <button class="btn btn-primary" id="reveal-btn" data-act="reveal">Reveal phrase</button>
+            <button class="btn btn-outline" id="copy-seed-btn" data-act="copy-seed">Copy phrase</button>
+            <button class="btn btn-danger" data-act="wipe">Wipe this session</button>
+          </div>
+        </div>
+
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span>SLIP-39</span>
+      <span>by Hossein Rezai</span>
+      <span><b>Shares are stored in plain form on your YubiKeys, protected by the key's PIN. Anyone
+          holding enough keys and their PINs has your seed.</b></span>
+      <a href="https://github.com/hosseinpro/yubishard" target="_blank" rel="noopener">Source</a>
+      <span class="right">MIT licensed · runs entirely in your browser</span>
+    </footer>
+
   </div>
-</main>
 
-<!-- ================= flow ================= -->
+  <!-- ================= row templates ================= -->
 
-<main class="flow" id="flow" hidden>
-  <nav class="side">
-    <button class="back-link" data-act="home">← All tools</button>
-    <div class="kicker" id="flow-kicker">Backup</div>
-    <div class="flow-title" id="flow-title">Split and seal</div>
-    <div class="stepper" id="stepper"></div>
-  </nav>
-
-  <section class="stage">
-
-    <!-- step: enter seed -->
-    <div class="panel" id="p-seed" hidden>
-      <h2 class="title">Enter your recovery phrase</h2>
-      <p class="sub">Paste it into any box and the rest fill in automatically. It stays in this tab's
-        memory only — never saved, never sent.</p>
-      <div class="wordbar">
-        <button class="chip" id="chip12" data-act="count12">12 words</button>
-        <button class="chip" id="chip24" data-act="count24">24 words</button>
-        <span class="note" id="word-progress"></span>
-      </div>
-      <div class="wordgrid" id="wordgrid"></div>
-      <div class="actions">
-        <button class="btn btn-primary" id="seed-next" data-act="seed-next">Continue</button>
-        <span class="note" id="seed-fp-wrap" hidden>Fingerprint
-          <span class="mono" id="seed-fp"></span> — check this matches at the end</span>
-        <span class="note" id="seed-blocked">Fill in every word to continue</span>
-      </div>
-      <div style="margin-top:18px">
-        <button class="linkbtn" data-act="demo">Fill with a throwaway test phrase</button>
+  <template id="tpl-step">
+    <div class="step">
+      <div class="step-rail"><span class="step-dot"></span><span class="step-line"></span></div>
+      <div class="step-body">
+        <div class="step-title"></div>
+        <div class="step-note"></div>
       </div>
     </div>
+  </template>
 
-    <!-- step: split settings -->
-    <div class="panel" id="p-split" hidden>
-      <h2 class="title">Choose how to split it</h2>
-      <p class="sub">More shares means more places to lose one safely. A lower threshold means an
-        easier recovery — and an easier theft.</p>
-      <div class="card">
-        <div class="slider-head"><span>Total shares</span><span id="n-val">5</span></div>
-        <input type="range" min="1" max="10" step="1" id="n-range" data-act="n">
-        <div class="slider-head spaced"><span>Needed to restore</span><span id="m-val">3</span></div>
-        <input type="range" min="1" max="10" step="1" id="m-range" data-act="m">
-        <div class="viz-row" id="viz"></div>
-        <p class="split-sentence" id="split-sentence"></p>
-        <p class="split-note" id="split-note"></p>
-      </div>
-      <div class="actions">
-        <button class="btn btn-primary" id="split-next" data-act="split-next">Split</button>
-        <button class="btn btn-outline" data-act="back">Back</button>
-      </div>
-    </div>
+  <template id="tpl-word">
+    <label class="word">
+      <span class="word-n"></span>
+      <input spellcheck="false" autocomplete="off" data-act="word">
+    </label>
+  </template>
 
-    <!-- step: encrypt -->
-    <div class="panel" id="p-encrypt" hidden>
-      <h2 class="title">Encrypt each share with its own key</h2>
-      <p class="sub">Plug in one YubiKey, encrypt the share, save the text somewhere safe, then
-        unplug it and move to the next.</p>
-      <div class="rows" id="enc-rows"></div>
-      <div class="actions" id="to-verify-wrap" hidden>
-        <button class="btn btn-primary" data-act="to-verify">Verify the backup →</button>
-      </div>
-    </div>
+  <template id="tpl-viz">
+    <div class="viz"><i></i><span></span></div>
+  </template>
 
-    <!-- step: verify -->
-    <div class="panel" id="p-verify" hidden>
-      <h2 class="title">Prove it restores</h2>
-      <p class="sub" id="verify-sub"></p>
-      <div class="rows" id="verify-rows"></div>
-      <div class="actions">
-        <button class="btn btn-primary" id="verify-btn" data-act="verify">Check these shares</button>
-        <span class="result" id="verify-msg"></span>
+  <template id="tpl-enc-row">
+    <div class="row">
+      <div class="row-head">
+        <span class="row-dot"></span>
+        <span class="row-title"></span>
+        <span class="row-sub"></span>
+        <span class="status"></span>
       </div>
-    </div>
-
-    <!-- step: done -->
-    <div class="panel" id="p-done" hidden>
-      <div class="badge-ok" id="done-badge"></div>
-      <h2 class="title">Your backup is ready</h2>
-      <p class="sub">Store each share and its YubiKey in different places. Fingerprint
-        <span class="mono" id="done-fp"></span> — write it down; a future restore should show the
-        same.</p>
-      <div class="done-grid" id="done-grid"></div>
-      <div class="actions">
-        <button class="btn btn-primary" data-act="print-all">Print all sheets</button>
-        <button class="btn btn-outline" data-act="download-all">Download all in one .txt</button>
-        <button class="btn btn-outline" data-act="download-each">Download one .txt per share</button>
-        <button class="btn btn-danger" data-act="wipe">Wipe this session</button>
+      <div class="row-body" hidden>
+        <div class="field-grid">
+          <label class="field">
+            <span class="field-label">Label for this key</span>
+            <input class="text f-label" data-act="keylabel" placeholder="e.g. Home safe — blue key">
+            <span class="field-help">Stored with the share so a restore can tell the keys apart.</span>
+          </label>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary btn-mid f-write" data-act="write-key">
+            <span class="spinner" hidden></span><span class="f-write-text"></span>
+          </button>
+          <span class="note f-hint"></span>
+        </div>
+        <div class="err-line f-err"></div>
       </div>
-      <div class="err-line" id="print-msg" hidden></div>
-    </div>
-
-    <!-- step: collect shares -->
-    <div class="panel" id="p-collect" hidden>
-      <h2 class="title">Collect your shares</h2>
-      <p class="sub">Paste the encrypted shares you kept. Order does not matter — the threshold is
-        read from the first one you paste.</p>
-      <div class="card" style="padding:22px">
-        <div class="slider-head"><span>Shares you have</span><span id="rm-val">3</span></div>
-        <input type="range" min="1" max="10" step="1" id="rm-range" data-act="rm">
-      </div>
-      <div class="rows" id="collect-rows" style="margin-top:14px"></div>
-      <div class="actions">
-        <button class="btn btn-primary" id="collect-next" data-act="collect-next">Continue to
-          unlock</button>
-        <span class="note" id="collect-hint"></span>
+      <div class="row-done" hidden>
+        <div class="blobbox f-stored"></div>
+        <div class="blob-actions">
+          <button class="btn-small f-reveal" data-act="reveal-share"></button>
+        </div>
       </div>
     </div>
+  </template>
 
-    <!-- step: unlock -->
-    <div class="panel" id="p-unlock" hidden>
-      <h2 class="title">Unlock the shares in turn</h2>
-      <p class="sub">Each share opens with the YubiKey that encrypted it. Plug that key in, unlock,
-        then swap to the next.</p>
-      <div class="rows" id="unlock-rows"></div>
-    </div>
-
-    <!-- step: restored -->
-    <div class="panel" id="p-restored" hidden>
-      <div class="badge-ok">Seed reconstructed</div>
-      <h2 class="title">Here is your recovery phrase</h2>
-      <p class="sub">Fingerprint <span class="mono" id="restored-fp"></span>. Close this tab as soon
-        as you have it.</p>
-      <div class="reveal-wrap">
-        <div class="words-out is-hidden" id="words-out"></div>
-      </div>
-      <div class="actions">
-        <button class="btn btn-primary" id="reveal-btn" data-act="reveal">Reveal phrase</button>
-        <button class="btn btn-outline" id="copy-seed-btn" data-act="copy-seed">Copy phrase</button>
-        <button class="btn btn-danger" data-act="wipe">Wipe this session</button>
+  <template id="tpl-read-row">
+    <div class="row is-done">
+      <div class="row-head">
+        <span class="row-dot">✓</span>
+        <span class="row-title"></span>
+        <span class="row-sub"></span>
+        <span class="status ok">Read</span>
       </div>
     </div>
+  </template>
 
-  </section>
-</main>
-
-<footer class="foot">
-  <span>Shamir Secret Sharing over GF(256)</span>
-  <span><b>Prototype — the YubiKey step and the per-share encryption are simulated. Do not use for a
-    real backup.</b></span>
-  <a href="https://github.com/hosseinpro/yubishard" target="_blank" rel="noopener">Source</a>
-  <span class="right">MIT licensed · runs entirely in your browser</span>
-</footer>
-
-</div>
-
-<!-- ================= row templates ================= -->
-
-<template id="tpl-step">
-  <div class="step">
-    <div class="step-rail"><span class="step-dot"></span><span class="step-line"></span></div>
-    <div class="step-body">
-      <div class="step-title"></div>
-      <div class="step-note"></div>
+  <template id="tpl-paste-row">
+    <div class="vrow crow">
+      <div class="crow-head"><span></span><span class="hint"></span></div>
+      <textarea class="blobinput" spellcheck="false" data-act="pasteshare"
+        placeholder="Paste the 20 or 33 words of one share"></textarea>
     </div>
-  </div>
-</template>
+  </template>
 
-<template id="tpl-word">
-  <label class="word">
-    <span class="word-n"></span>
-    <input spellcheck="false" autocomplete="off" data-act="word">
-  </label>
-</template>
-
-<template id="tpl-viz">
-  <div class="viz"><i></i><span></span></div>
-</template>
-
-<template id="tpl-enc-row">
-  <div class="row">
-    <div class="row-head">
-      <span class="row-dot"></span>
-      <span class="row-title"></span>
-      <span class="row-sub"></span>
-      <span class="status"></span>
+  <template id="tpl-done-card">
+    <div class="done-card">
+      <div class="done-head"><span class="done-num"></span><span class="done-label"></span></div>
+      <div class="done-blob"></div>
     </div>
-    <div class="row-body" hidden>
-      <div class="field-grid">
-        <label class="field">
-          <span class="field-label">Label for this key</span>
-          <input class="text f-label" data-act="keylabel" placeholder="e.g. Home safe — blue key">
-          <span class="field-help">Printed on the share so you know which key opens it.</span>
-        </label>
-        <label class="field">
-          <span class="field-label">Passphrase <span>(optional)</span></span>
-          <input class="text f-pass" type="password" data-act="pass"
-            placeholder="Adds a second factor">
-          <span class="field-help">You must remember this. It cannot be recovered.</span>
-        </label>
-      </div>
-      <div class="actions">
-        <button class="btn btn-primary btn-mid f-encrypt" data-act="encrypt">
-          <span class="spinner" hidden></span><span class="f-encrypt-text"></span>
-        </button>
-        <span class="note f-hint"></span>
-      </div>
+  </template>
+
+  <template id="tpl-word-out">
+    <div class="word">
+      <span class="word-n"></span>
+      <span class="value"></span>
     </div>
-    <div class="row-done" hidden>
-      <div class="blobbox"></div>
-      <div class="blob-actions">
-        <button class="btn-small f-copy" data-act="copy-share"></button>
-        <button class="btn-small" data-act="dl-share">Download .txt</button>
-      </div>
-    </div>
-  </div>
-</template>
+  </template>
 
-<template id="tpl-verify-row">
-  <div class="vrow">
-    <div class="vrow-title"></div>
-    <textarea class="blobinput" spellcheck="false" data-act="vblob"
-      placeholder="Paste the YS1… text"></textarea>
-    <input class="text" type="password" data-act="vpass"
-      placeholder="Passphrase for this share (if you set one)">
-  </div>
-</template>
+  <script>
+    'use strict';
 
-<template id="tpl-collect-row">
-  <div class="vrow crow">
-    <div class="crow-head"><span></span><span class="hint"></span></div>
-    <textarea class="blobinput" spellcheck="false" data-act="rblob"
-      placeholder="Paste the YS1… text"></textarea>
-  </div>
-</template>
+    /* SLIP-39 wordlist (1024) and BIP-39 English wordlist (2048). */
+    var SLIP39_WORDS = (
+      'academic,acid,acne,acquire,acrobat,activity,actress,adapt,adequate,adjust,admit,adorn,' +
+      'adult,advance,advocate,afraid,again,agency,agree,aide,aircraft,airline,airport,ajar,' +
+      'alarm,album,alcohol,alien,alive,alpha,already,alto,aluminum,always,amazing,ambition,' +
+      'amount,amuse,analysis,anatomy,ancestor,ancient,angel,angry,animal,answer,antenna,anxiety,' +
+      'apart,aquatic,arcade,arena,argue,armed,artist,artwork,aspect,auction,august,aunt,' +
+      'average,aviation,avoid,award,away,axis,axle,beam,beard,beaver,become,bedroom,' +
+      'behavior,being,believe,belong,benefit,best,beyond,bike,biology,birthday,bishop,black,' +
+      'blanket,blessing,blimp,blind,blue,body,bolt,boring,born,both,boundary,bracelet,' +
+      'branch,brave,breathe,briefing,broken,brother,browser,bucket,budget,building,bulb,bulge,' +
+      'bumpy,bundle,burden,burning,busy,buyer,cage,calcium,camera,campus,canyon,capacity,' +
+      'capital,capture,carbon,cards,careful,cargo,carpet,carve,category,cause,ceiling,center,' +
+      'ceramic,champion,change,charity,check,chemical,chest,chew,chubby,cinema,civil,class,' +
+      'clay,cleanup,client,climate,clinic,clock,clogs,closet,clothes,club,cluster,coal,' +
+      'coastal,coding,column,company,corner,costume,counter,course,cover,cowboy,cradle,craft,' +
+      'crazy,credit,cricket,criminal,crisis,critical,crowd,crucial,crunch,crush,crystal,cubic,' +
+      'cultural,curious,curly,custody,cylinder,daisy,damage,dance,darkness,database,daughter,deadline,' +
+      'deal,debris,debut,decent,decision,declare,decorate,decrease,deliver,demand,density,deny,' +
+      'depart,depend,depict,deploy,describe,desert,desire,desktop,destroy,detailed,detect,device,' +
+      'devote,diagnose,dictate,diet,dilemma,diminish,dining,diploma,disaster,discuss,disease,dish,' +
+      'dismiss,display,distance,dive,divorce,document,domain,domestic,dominant,dough,downtown,dragon,' +
+      'dramatic,dream,dress,drift,drink,drove,drug,dryer,duckling,duke,duration,dwarf,' +
+      'dynamic,early,earth,easel,easy,echo,eclipse,ecology,edge,editor,educate,either,' +
+      'elbow,elder,election,elegant,element,elephant,elevator,elite,else,email,emerald,emission,' +
+      'emperor,emphasis,employer,empty,ending,endless,endorse,enemy,energy,enforce,engage,enjoy,' +
+      'enlarge,entrance,envelope,envy,epidemic,episode,equation,equip,eraser,erode,escape,estate,' +
+      'estimate,evaluate,evening,evidence,evil,evoke,exact,example,exceed,exchange,exclude,excuse,' +
+      'execute,exercise,exhaust,exotic,expand,expect,explain,express,extend,extra,eyebrow,facility,' +
+      'fact,failure,faint,fake,false,family,famous,fancy,fangs,fantasy,fatal,fatigue,' +
+      'favorite,fawn,fiber,fiction,filter,finance,findings,finger,firefly,firm,fiscal,fishing,' +
+      'fitness,flame,flash,flavor,flea,flexible,flip,float,floral,fluff,focus,forbid,' +
+      'force,forecast,forget,formal,fortune,forward,founder,fraction,fragment,frequent,freshman,friar,' +
+      'fridge,friendly,frost,froth,frozen,fumes,funding,furl,fused,galaxy,game,garbage,' +
+      'garden,garlic,gasoline,gather,general,genius,genre,genuine,geology,gesture,glad,glance,' +
+      'glasses,glen,glimpse,goat,golden,graduate,grant,grasp,gravity,gray,greatest,grief,' +
+      'grill,grin,grocery,gross,group,grownup,grumpy,guard,guest,guilt,guitar,gums,' +
+      'hairy,hamster,hand,hanger,harvest,have,havoc,hawk,hazard,headset,health,hearing,' +
+      'heat,helpful,herald,herd,hesitate,hobo,holiday,holy,home,hormone,hospital,hour,' +
+      'huge,human,humidity,hunting,husband,hush,husky,hybrid,idea,identify,idle,image,' +
+      'impact,imply,improve,impulse,include,income,increase,index,indicate,industry,infant,inform,' +
+      'inherit,injury,inmate,insect,inside,install,intend,intimate,invasion,involve,iris,island,' +
+      'isolate,item,ivory,jacket,jerky,jewelry,join,judicial,juice,jump,junction,junior,' +
+      'junk,jury,justice,kernel,keyboard,kidney,kind,kitchen,knife,knit,laden,ladle,' +
+      'ladybug,lair,lamp,language,large,laser,laundry,lawsuit,leader,leaf,learn,leaves,' +
+      'lecture,legal,legend,legs,lend,length,level,liberty,library,license,lift,likely,' +
+      'lilac,lily,lips,liquid,listen,literary,living,lizard,loan,lobe,location,losing,' +
+      'loud,loyalty,luck,lunar,lunch,lungs,luxury,lying,lyrics,machine,magazine,maiden,' +
+      'mailman,main,makeup,making,mama,manager,mandate,mansion,manual,marathon,march,market,' +
+      'marvel,mason,material,math,maximum,mayor,meaning,medal,medical,member,memory,mental,' +
+      'merchant,merit,method,metric,midst,mild,military,mineral,minister,miracle,mixed,mixture,' +
+      'mobile,modern,modify,moisture,moment,morning,mortgage,mother,mountain,mouse,move,much,' +
+      'mule,multiple,muscle,museum,music,mustang,nail,national,necklace,negative,nervous,network,' +
+      'news,nuclear,numb,numerous,nylon,oasis,obesity,object,observe,obtain,ocean,often,' +
+      'olympic,omit,oral,orange,orbit,order,ordinary,organize,ounce,oven,overall,owner,' +
+      'paces,pacific,package,paid,painting,pajamas,pancake,pants,papa,paper,parcel,parking,' +
+      'party,patent,patrol,payment,payroll,peaceful,peanut,peasant,pecan,penalty,pencil,percent,' +
+      'perfect,permit,petition,phantom,pharmacy,photo,phrase,physics,pickup,picture,piece,pile,' +
+      'pink,pipeline,pistol,pitch,plains,plan,plastic,platform,playoff,pleasure,plot,plunge,' +
+      'practice,prayer,preach,predator,pregnant,premium,prepare,presence,prevent,priest,primary,priority,' +
+      'prisoner,privacy,prize,problem,process,profile,program,promise,prospect,provide,prune,public,' +
+      'pulse,pumps,punish,puny,pupal,purchase,purple,python,quantity,quarter,quick,quiet,' +
+      'race,racism,radar,railroad,rainbow,raisin,random,ranked,rapids,raspy,reaction,realize,' +
+      'rebound,rebuild,recall,receiver,recover,regret,regular,reject,relate,remember,remind,remove,' +
+      'render,repair,repeat,replace,require,rescue,research,resident,response,result,retailer,retreat,' +
+      'reunion,revenue,review,reward,rhyme,rhythm,rich,rival,river,robin,rocky,romantic,' +
+      'romp,roster,round,royal,ruin,ruler,rumor,sack,safari,salary,salon,salt,' +
+      'satisfy,satoshi,saver,says,scandal,scared,scatter,scene,scholar,science,scout,scramble,' +
+      'screw,script,scroll,seafood,season,secret,security,segment,senior,shadow,shaft,shame,' +
+      'shaped,sharp,shelter,sheriff,short,should,shrimp,sidewalk,silent,silver,similar,simple,' +
+      'single,sister,skin,skunk,slap,slavery,sled,slice,slim,slow,slush,smart,' +
+      'smear,smell,smirk,smith,smoking,smug,snake,snapshot,sniff,society,software,soldier,' +
+      'solution,soul,source,space,spark,speak,species,spelling,spend,spew,spider,spill,' +
+      'spine,spirit,spit,spray,sprinkle,square,squeeze,stadium,staff,standard,starting,station,' +
+      'stay,steady,step,stick,stilt,story,strategy,strike,style,subject,submit,sugar,' +
+      'suitable,sunlight,superior,surface,surprise,survive,sweater,swimming,swing,switch,symbolic,sympathy,' +
+      'syndrome,system,tackle,tactics,tadpole,talent,task,taste,taught,taxi,teacher,teammate,' +
+      'teaspoon,temple,tenant,tendency,tension,terminal,testify,texture,thank,that,theater,theory,' +
+      'therapy,thorn,threaten,thumb,thunder,ticket,tidy,timber,timely,ting,tofu,together,' +
+      'tolerate,total,toxic,tracks,traffic,training,transfer,trash,traveler,treat,trend,trial,' +
+      'tricycle,trip,triumph,trouble,true,trust,twice,twin,type,typical,ugly,ultimate,' +
+      'umbrella,uncover,undergo,unfair,unfold,unhappy,union,universe,unkind,unknown,unusual,unwrap,' +
+      'upgrade,upstairs,username,usher,usual,valid,valuable,vampire,vanish,various,vegan,velvet,' +
+      'venture,verdict,verify,very,veteran,vexed,victim,video,view,vintage,violence,viral,' +
+      'visitor,visual,vitamins,vocal,voice,volume,voter,voting,walnut,warmth,warn,watch,' +
+      'wavy,wealthy,weapon,webcam,welcome,welfare,western,width,wildlife,window,wine,wireless,' +
+      'wisdom,withdraw,wits,wolf,woman,work,worthy,wrap,wrist,writing,wrote,year,' +
+      'yelp,yield,yoga,zero'
+    ).split(',');
 
-<template id="tpl-unlock-row">
-  <div class="row">
-    <div class="row-head">
-      <span class="row-dot"></span>
-      <span class="row-title"></span>
-      <span class="row-sub"></span>
-      <span class="status"></span>
-    </div>
-    <div class="row-body" hidden>
-      <div class="unlock-body">
-        <label class="field">
-          <span class="field-label">Passphrase for this share <span>(if you set one)</span></span>
-          <input class="text f-pass" type="password" data-act="rpass">
-        </label>
-        <button class="btn btn-primary btn-mid f-decrypt" data-act="decrypt">
-          <span class="spinner" hidden></span><span class="f-decrypt-text"></span>
-        </button>
-      </div>
-      <div class="err-line f-err"></div>
-    </div>
-  </div>
-</template>
+    var BIP39_WORDS = (
+      'abandon,ability,able,about,above,absent,absorb,abstract,absurd,abuse,access,accident,' +
+      'account,accuse,achieve,acid,acoustic,acquire,across,act,action,actor,actress,actual,' +
+      'adapt,add,addict,address,adjust,admit,adult,advance,advice,aerobic,affair,afford,' +
+      'afraid,again,age,agent,agree,ahead,aim,air,airport,aisle,alarm,album,' +
+      'alcohol,alert,alien,all,alley,allow,almost,alone,alpha,already,also,alter,' +
+      'always,amateur,amazing,among,amount,amused,analyst,anchor,ancient,anger,angle,angry,' +
+      'animal,ankle,announce,annual,another,answer,antenna,antique,anxiety,any,apart,apology,' +
+      'appear,apple,approve,april,arch,arctic,area,arena,argue,arm,armed,armor,' +
+      'army,around,arrange,arrest,arrive,arrow,art,artefact,artist,artwork,ask,aspect,' +
+      'assault,asset,assist,assume,asthma,athlete,atom,attack,attend,attitude,attract,auction,' +
+      'audit,august,aunt,author,auto,autumn,average,avocado,avoid,awake,aware,away,' +
+      'awesome,awful,awkward,axis,baby,bachelor,bacon,badge,bag,balance,balcony,ball,' +
+      'bamboo,banana,banner,bar,barely,bargain,barrel,base,basic,basket,battle,beach,' +
+      'bean,beauty,because,become,beef,before,begin,behave,behind,believe,below,belt,' +
+      'bench,benefit,best,betray,better,between,beyond,bicycle,bid,bike,bind,biology,' +
+      'bird,birth,bitter,black,blade,blame,blanket,blast,bleak,bless,blind,blood,' +
+      'blossom,blouse,blue,blur,blush,board,boat,body,boil,bomb,bone,bonus,' +
+      'book,boost,border,boring,borrow,boss,bottom,bounce,box,boy,bracket,brain,' +
+      'brand,brass,brave,bread,breeze,brick,bridge,brief,bright,bring,brisk,broccoli,' +
+      'broken,bronze,broom,brother,brown,brush,bubble,buddy,budget,buffalo,build,bulb,' +
+      'bulk,bullet,bundle,bunker,burden,burger,burst,bus,business,busy,butter,buyer,' +
+      'buzz,cabbage,cabin,cable,cactus,cage,cake,call,calm,camera,camp,can,' +
+      'canal,cancel,candy,cannon,canoe,canvas,canyon,capable,capital,captain,car,carbon,' +
+      'card,cargo,carpet,carry,cart,case,cash,casino,castle,casual,cat,catalog,' +
+      'catch,category,cattle,caught,cause,caution,cave,ceiling,celery,cement,census,century,' +
+      'cereal,certain,chair,chalk,champion,change,chaos,chapter,charge,chase,chat,cheap,' +
+      'check,cheese,chef,cherry,chest,chicken,chief,child,chimney,choice,choose,chronic,' +
+      'chuckle,chunk,churn,cigar,cinnamon,circle,citizen,city,civil,claim,clap,clarify,' +
+      'claw,clay,clean,clerk,clever,click,client,cliff,climb,clinic,clip,clock,' +
+      'clog,close,cloth,cloud,clown,club,clump,cluster,clutch,coach,coast,coconut,' +
+      'code,coffee,coil,coin,collect,color,column,combine,come,comfort,comic,common,' +
+      'company,concert,conduct,confirm,congress,connect,consider,control,convince,cook,cool,copper,' +
+      'copy,coral,core,corn,correct,cost,cotton,couch,country,couple,course,cousin,' +
+      'cover,coyote,crack,cradle,craft,cram,crane,crash,crater,crawl,crazy,cream,' +
+      'credit,creek,crew,cricket,crime,crisp,critic,crop,cross,crouch,crowd,crucial,' +
+      'cruel,cruise,crumble,crunch,crush,cry,crystal,cube,culture,cup,cupboard,curious,' +
+      'current,curtain,curve,cushion,custom,cute,cycle,dad,damage,damp,dance,danger,' +
+      'daring,dash,daughter,dawn,day,deal,debate,debris,decade,december,decide,decline,' +
+      'decorate,decrease,deer,defense,define,defy,degree,delay,deliver,demand,demise,denial,' +
+      'dentist,deny,depart,depend,deposit,depth,deputy,derive,describe,desert,design,desk,' +
+      'despair,destroy,detail,detect,develop,device,devote,diagram,dial,diamond,diary,dice,' +
+      'diesel,diet,differ,digital,dignity,dilemma,dinner,dinosaur,direct,dirt,disagree,discover,' +
+      'disease,dish,dismiss,disorder,display,distance,divert,divide,divorce,dizzy,doctor,document,' +
+      'dog,doll,dolphin,domain,donate,donkey,donor,door,dose,double,dove,draft,' +
+      'dragon,drama,drastic,draw,dream,dress,drift,drill,drink,drip,drive,drop,' +
+      'drum,dry,duck,dumb,dune,during,dust,dutch,duty,dwarf,dynamic,eager,' +
+      'eagle,early,earn,earth,easily,east,easy,echo,ecology,economy,edge,edit,' +
+      'educate,effort,egg,eight,either,elbow,elder,electric,elegant,element,elephant,elevator,' +
+      'elite,else,embark,embody,embrace,emerge,emotion,employ,empower,empty,enable,enact,' +
+      'end,endless,endorse,enemy,energy,enforce,engage,engine,enhance,enjoy,enlist,enough,' +
+      'enrich,enroll,ensure,enter,entire,entry,envelope,episode,equal,equip,era,erase,' +
+      'erode,erosion,error,erupt,escape,essay,essence,estate,eternal,ethics,evidence,evil,' +
+      'evoke,evolve,exact,example,excess,exchange,excite,exclude,excuse,execute,exercise,exhaust,' +
+      'exhibit,exile,exist,exit,exotic,expand,expect,expire,explain,expose,express,extend,' +
+      'extra,eye,eyebrow,fabric,face,faculty,fade,faint,faith,fall,false,fame,' +
+      'family,famous,fan,fancy,fantasy,farm,fashion,fat,fatal,father,fatigue,fault,' +
+      'favorite,feature,february,federal,fee,feed,feel,female,fence,festival,fetch,fever,' +
+      'few,fiber,fiction,field,figure,file,film,filter,final,find,fine,finger,' +
+      'finish,fire,firm,first,fiscal,fish,fit,fitness,fix,flag,flame,flash,' +
+      'flat,flavor,flee,flight,flip,float,flock,floor,flower,fluid,flush,fly,' +
+      'foam,focus,fog,foil,fold,follow,food,foot,force,forest,forget,fork,' +
+      'fortune,forum,forward,fossil,foster,found,fox,fragile,frame,frequent,fresh,friend,' +
+      'fringe,frog,front,frost,frown,frozen,fruit,fuel,fun,funny,furnace,fury,' +
+      'future,gadget,gain,galaxy,gallery,game,gap,garage,garbage,garden,garlic,garment,' +
+      'gas,gasp,gate,gather,gauge,gaze,general,genius,genre,gentle,genuine,gesture,' +
+      'ghost,giant,gift,giggle,ginger,giraffe,girl,give,glad,glance,glare,glass,' +
+      'glide,glimpse,globe,gloom,glory,glove,glow,glue,goat,goddess,gold,good,' +
+      'goose,gorilla,gospel,gossip,govern,gown,grab,grace,grain,grant,grape,grass,' +
+      'gravity,great,green,grid,grief,grit,grocery,group,grow,grunt,guard,guess,' +
+      'guide,guilt,guitar,gun,gym,habit,hair,half,hammer,hamster,hand,happy,' +
+      'harbor,hard,harsh,harvest,hat,have,hawk,hazard,head,health,heart,heavy,' +
+      'hedgehog,height,hello,helmet,help,hen,hero,hidden,high,hill,hint,hip,' +
+      'hire,history,hobby,hockey,hold,hole,holiday,hollow,home,honey,hood,hope,' +
+      'horn,horror,horse,hospital,host,hotel,hour,hover,hub,huge,human,humble,' +
+      'humor,hundred,hungry,hunt,hurdle,hurry,hurt,husband,hybrid,ice,icon,idea,' +
+      'identify,idle,ignore,ill,illegal,illness,image,imitate,immense,immune,impact,impose,' +
+      'improve,impulse,inch,include,income,increase,index,indicate,indoor,industry,infant,inflict,' +
+      'inform,inhale,inherit,initial,inject,injury,inmate,inner,innocent,input,inquiry,insane,' +
+      'insect,inside,inspire,install,intact,interest,into,invest,invite,involve,iron,island,' +
+      'isolate,issue,item,ivory,jacket,jaguar,jar,jazz,jealous,jeans,jelly,jewel,' +
+      'job,join,joke,journey,joy,judge,juice,jump,jungle,junior,junk,just,' +
+      'kangaroo,keen,keep,ketchup,key,kick,kid,kidney,kind,kingdom,kiss,kit,' +
+      'kitchen,kite,kitten,kiwi,knee,knife,knock,know,lab,label,labor,ladder,' +
+      'lady,lake,lamp,language,laptop,large,later,latin,laugh,laundry,lava,law,' +
+      'lawn,lawsuit,layer,lazy,leader,leaf,learn,leave,lecture,left,leg,legal,' +
+      'legend,leisure,lemon,lend,length,lens,leopard,lesson,letter,level,liar,liberty,' +
+      'library,license,life,lift,light,like,limb,limit,link,lion,liquid,list,' +
+      'little,live,lizard,load,loan,lobster,local,lock,logic,lonely,long,loop,' +
+      'lottery,loud,lounge,love,loyal,lucky,luggage,lumber,lunar,lunch,luxury,lyrics,' +
+      'machine,mad,magic,magnet,maid,mail,main,major,make,mammal,man,manage,' +
+      'mandate,mango,mansion,manual,maple,marble,march,margin,marine,market,marriage,mask,' +
+      'mass,master,match,material,math,matrix,matter,maximum,maze,meadow,mean,measure,' +
+      'meat,mechanic,medal,media,melody,melt,member,memory,mention,menu,mercy,merge,' +
+      'merit,merry,mesh,message,metal,method,middle,midnight,milk,million,mimic,mind,' +
+      'minimum,minor,minute,miracle,mirror,misery,miss,mistake,mix,mixed,mixture,mobile,' +
+      'model,modify,mom,moment,monitor,monkey,monster,month,moon,moral,more,morning,' +
+      'mosquito,mother,motion,motor,mountain,mouse,move,movie,much,muffin,mule,multiply,' +
+      'muscle,museum,mushroom,music,must,mutual,myself,mystery,myth,naive,name,napkin,' +
+      'narrow,nasty,nation,nature,near,neck,need,negative,neglect,neither,nephew,nerve,' +
+      'nest,net,network,neutral,never,news,next,nice,night,noble,noise,nominee,' +
+      'noodle,normal,north,nose,notable,note,nothing,notice,novel,now,nuclear,number,' +
+      'nurse,nut,oak,obey,object,oblige,obscure,observe,obtain,obvious,occur,ocean,' +
+      'october,odor,off,offer,office,often,oil,okay,old,olive,olympic,omit,' +
+      'once,one,onion,online,only,open,opera,opinion,oppose,option,orange,orbit,' +
+      'orchard,order,ordinary,organ,orient,original,orphan,ostrich,other,outdoor,outer,output,' +
+      'outside,oval,oven,over,own,owner,oxygen,oyster,ozone,pact,paddle,page,' +
+      'pair,palace,palm,panda,panel,panic,panther,paper,parade,parent,park,parrot,' +
+      'party,pass,patch,path,patient,patrol,pattern,pause,pave,payment,peace,peanut,' +
+      'pear,peasant,pelican,pen,penalty,pencil,people,pepper,perfect,permit,person,pet,' +
+      'phone,photo,phrase,physical,piano,picnic,picture,piece,pig,pigeon,pill,pilot,' +
+      'pink,pioneer,pipe,pistol,pitch,pizza,place,planet,plastic,plate,play,please,' +
+      'pledge,pluck,plug,plunge,poem,poet,point,polar,pole,police,pond,pony,' +
+      'pool,popular,portion,position,possible,post,potato,pottery,poverty,powder,power,practice,' +
+      'praise,predict,prefer,prepare,present,pretty,prevent,price,pride,primary,print,priority,' +
+      'prison,private,prize,problem,process,produce,profit,program,project,promote,proof,property,' +
+      'prosper,protect,proud,provide,public,pudding,pull,pulp,pulse,pumpkin,punch,pupil,' +
+      'puppy,purchase,purity,purpose,purse,push,put,puzzle,pyramid,quality,quantum,quarter,' +
+      'question,quick,quit,quiz,quote,rabbit,raccoon,race,rack,radar,radio,rail,' +
+      'rain,raise,rally,ramp,ranch,random,range,rapid,rare,rate,rather,raven,' +
+      'raw,razor,ready,real,reason,rebel,rebuild,recall,receive,recipe,record,recycle,' +
+      'reduce,reflect,reform,refuse,region,regret,regular,reject,relax,release,relief,rely,' +
+      'remain,remember,remind,remove,render,renew,rent,reopen,repair,repeat,replace,report,' +
+      'require,rescue,resemble,resist,resource,response,result,retire,retreat,return,reunion,reveal,' +
+      'review,reward,rhythm,rib,ribbon,rice,rich,ride,ridge,rifle,right,rigid,' +
+      'ring,riot,ripple,risk,ritual,rival,river,road,roast,robot,robust,rocket,' +
+      'romance,roof,rookie,room,rose,rotate,rough,round,route,royal,rubber,rude,' +
+      'rug,rule,run,runway,rural,sad,saddle,sadness,safe,sail,salad,salmon,' +
+      'salon,salt,salute,same,sample,sand,satisfy,satoshi,sauce,sausage,save,say,' +
+      'scale,scan,scare,scatter,scene,scheme,school,science,scissors,scorpion,scout,scrap,' +
+      'screen,script,scrub,sea,search,season,seat,second,secret,section,security,seed,' +
+      'seek,segment,select,sell,seminar,senior,sense,sentence,series,service,session,settle,' +
+      'setup,seven,shadow,shaft,shallow,share,shed,shell,sheriff,shield,shift,shine,' +
+      'ship,shiver,shock,shoe,shoot,shop,short,shoulder,shove,shrimp,shrug,shuffle,' +
+      'shy,sibling,sick,side,siege,sight,sign,silent,silk,silly,silver,similar,' +
+      'simple,since,sing,siren,sister,situate,six,size,skate,sketch,ski,skill,' +
+      'skin,skirt,skull,slab,slam,sleep,slender,slice,slide,slight,slim,slogan,' +
+      'slot,slow,slush,small,smart,smile,smoke,smooth,snack,snake,snap,sniff,' +
+      'snow,soap,soccer,social,sock,soda,soft,solar,soldier,solid,solution,solve,' +
+      'someone,song,soon,sorry,sort,soul,sound,soup,source,south,space,spare,' +
+      'spatial,spawn,speak,special,speed,spell,spend,sphere,spice,spider,spike,spin,' +
+      'spirit,split,spoil,sponsor,spoon,sport,spot,spray,spread,spring,spy,square,' +
+      'squeeze,squirrel,stable,stadium,staff,stage,stairs,stamp,stand,start,state,stay,' +
+      'steak,steel,stem,step,stereo,stick,still,sting,stock,stomach,stone,stool,' +
+      'story,stove,strategy,street,strike,strong,struggle,student,stuff,stumble,style,subject,' +
+      'submit,subway,success,such,sudden,suffer,sugar,suggest,suit,summer,sun,sunny,' +
+      'sunset,super,supply,supreme,sure,surface,surge,surprise,surround,survey,suspect,sustain,' +
+      'swallow,swamp,swap,swarm,swear,sweet,swift,swim,swing,switch,sword,symbol,' +
+      'symptom,syrup,system,table,tackle,tag,tail,talent,talk,tank,tape,target,' +
+      'task,taste,tattoo,taxi,teach,team,tell,ten,tenant,tennis,tent,term,' +
+      'test,text,thank,that,theme,then,theory,there,they,thing,this,thought,' +
+      'three,thrive,throw,thumb,thunder,ticket,tide,tiger,tilt,timber,time,tiny,' +
+      'tip,tired,tissue,title,toast,tobacco,today,toddler,toe,together,toilet,token,' +
+      'tomato,tomorrow,tone,tongue,tonight,tool,tooth,top,topic,topple,torch,tornado,' +
+      'tortoise,toss,total,tourist,toward,tower,town,toy,track,trade,traffic,tragic,' +
+      'train,transfer,trap,trash,travel,tray,treat,tree,trend,trial,tribe,trick,' +
+      'trigger,trim,trip,trophy,trouble,truck,true,truly,trumpet,trust,truth,try,' +
+      'tube,tuition,tumble,tuna,tunnel,turkey,turn,turtle,twelve,twenty,twice,twin,' +
+      'twist,two,type,typical,ugly,umbrella,unable,unaware,uncle,uncover,under,undo,' +
+      'unfair,unfold,unhappy,uniform,unique,unit,universe,unknown,unlock,until,unusual,unveil,' +
+      'update,upgrade,uphold,upon,upper,upset,urban,urge,usage,use,used,useful,' +
+      'useless,usual,utility,vacant,vacuum,vague,valid,valley,valve,van,vanish,vapor,' +
+      'various,vast,vault,vehicle,velvet,vendor,venture,venue,verb,verify,version,very,' +
+      'vessel,veteran,viable,vibrant,vicious,victory,video,view,village,vintage,violin,virtual,' +
+      'virus,visa,visit,visual,vital,vivid,vocal,voice,void,volcano,volume,vote,' +
+      'voyage,wage,wagon,wait,walk,wall,walnut,want,warfare,warm,warrior,wash,' +
+      'wasp,waste,water,wave,way,wealth,weapon,wear,weasel,weather,web,wedding,' +
+      'weekend,weird,welcome,west,wet,whale,what,wheat,wheel,when,where,whip,' +
+      'whisper,wide,width,wife,wild,will,win,window,wine,wing,wink,winner,' +
+      'winter,wire,wisdom,wise,wish,witness,wolf,woman,wonder,wood,wool,word,' +
+      'work,world,worry,worth,wrap,wreck,wrestle,wrist,write,wrong,yard,year,' +
+      'yellow,you,young,youth,zebra,zero,zone,zoo'
+    ).split(',');
 
-<template id="tpl-done-card">
-  <div class="done-card">
-    <div class="done-head"><span class="done-num"></span><span class="done-label"></span></div>
-    <div class="done-blob"></div>
-    <div class="blob-actions">
-      <button class="btn-small f-copy" data-act="copy-share"></button>
-      <button class="btn-small" data-act="dl-share-full">Download .txt</button>
-      <button class="btn-small" data-act="print-one">Print sheet</button>
-    </div>
-  </div>
-</template>
+    /* ============================================================
+       Byte helpers
+       ============================================================ */
 
-<template id="tpl-word-out">
-  <div class="word">
-    <span class="word-n"></span>
-    <span class="value"></span>
-  </div>
-</template>
-
-<script>
-'use strict';
-
-/* ============================================================
-   Shamir Secret Sharing over GF(256)
-   ============================================================ */
-
-var EXP = new Uint8Array(512), LOG = new Uint8Array(256);
-(function () {
-  var x = 1;
-  for (var i = 0; i < 255; i++) {
-    EXP[i] = x;
-    LOG[x] = i;
-    var t = (x << 1) ^ x;
-    if (t & 0x100) t ^= 0x11b;
-    x = t & 0xff;
-  }
-  for (var j = 255; j < 512; j++) EXP[j] = EXP[j - 255];
-})();
-
-function mul(a, b) { return (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]]; }
-function div(a, b) { return a === 0 ? 0 : EXP[LOG[a] + 255 - LOG[b]]; }
-
-// Split `bytes` into n shares, any m of which reconstruct it.
-function splitBytes(bytes, n, m) {
-  var out = [], i;
-  for (i = 1; i <= n; i++) out.push({ x: i, y: new Uint8Array(bytes.length) });
-  for (var b = 0; b < bytes.length; b++) {
-    var c = [bytes[b]];
-    for (var k = 1; k < m; k++) c.push(Math.floor(Math.random() * 256));
-    for (i = 0; i < out.length; i++) {
-      var s = out[i], acc = 0;
-      for (var d = c.length - 1; d >= 0; d--) acc = mul(acc, s.x) ^ c[d];
-      s.y[b] = acc;
+    function bytesToHex(b) {
+      var s = '', i;
+      for (i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+      return s;
     }
-  }
-  return out;
-}
 
-// Lagrange interpolation at x = 0.
-function combineShares(shares) {
-  var len = shares[0].y.length, out = new Uint8Array(len);
-  for (var b = 0; b < len; b++) {
-    var acc = 0;
-    for (var i = 0; i < shares.length; i++) {
-      var num = 1, den = 1;
-      for (var j = 0; j < shares.length; j++) {
-        if (i === j) continue;
-        num = mul(num, shares[j].x);
-        den = mul(den, shares[i].x ^ shares[j].x);
+    function hexToBytes(h) {
+      var out = new Uint8Array(h.length / 2), i;
+      for (i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+      return out;
+    }
+
+    function concatBytes() {
+      var total = 0, i;
+      for (i = 0; i < arguments.length; i++) total += arguments[i].length;
+      var out = new Uint8Array(total), at = 0;
+      for (i = 0; i < arguments.length; i++) { out.set(arguments[i], at); at += arguments[i].length; }
+      return out;
+    }
+
+    function xorBytes(a, b) {
+      var out = new Uint8Array(a.length), i;
+      for (i = 0; i < a.length; i++) out[i] = a[i] ^ b[i];
+      return out;
+    }
+
+    function randomBytes(n) {
+      return crypto.getRandomValues(new Uint8Array(n));
+    }
+
+    var utf8 = new TextEncoder();
+
+    /* ============================================================
+       WebCrypto wrappers
+    
+       WebAuthn forces this tool onto localhost or https, both of which are
+       secure contexts, so crypto.subtle is always available. Only RIPEMD-160
+       and secp256k1 have to be written by hand — WebCrypto has neither.
+       ============================================================ */
+
+    function subtle() { return crypto.subtle; }
+
+    function sha256(data) {
+      return subtle().digest('SHA-256', data).then(function (b) { return new Uint8Array(b); });
+    }
+
+    function hmac(hash, key, data) {
+      // An empty HMAC key is legal in the abstract but rejected by importKey, and
+      // it never arises here: SLIP-39 digests key on >= 12 random bytes.
+      return subtle().importKey('raw', key, { name: 'HMAC', hash: hash }, false, ['sign'])
+        .then(function (k) { return subtle().sign('HMAC', k, data); })
+        .then(function (b) { return new Uint8Array(b); });
+    }
+
+    function pbkdf2(hash, password, salt, iterations, dkLen) {
+      return subtle().importKey('raw', password, 'PBKDF2', false, ['deriveBits'])
+        .then(function (k) {
+          return subtle().deriveBits(
+            { name: 'PBKDF2', hash: hash, salt: salt, iterations: iterations }, k, dkLen * 8);
+        })
+        .then(function (b) { return new Uint8Array(b); });
+    }
+
+    /* ============================================================
+       RIPEMD-160
+    
+       Needed only for the BIP-32 fingerprint, which is HASH160 of the
+       master public key. WebCrypto does not implement it.
+       ============================================================ */
+
+    var RMD_ZL = [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+      7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8,
+      3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12,
+      1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2,
+      4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13];
+    var RMD_ZR = [
+      5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12,
+      6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2,
+      15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13,
+      8, 6, 4, 1, 3, 11, 15, 0, 5, 12, 2, 13, 9, 7, 10, 14,
+      12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11];
+    var RMD_SL = [
+      11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8,
+      7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12,
+      11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5,
+      11, 12, 14, 15, 14, 15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12,
+      9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6];
+    var RMD_SR = [
+      8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6,
+      9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11,
+      9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5,
+      15, 5, 8, 11, 14, 14, 6, 14, 6, 9, 12, 9, 12, 5, 15, 8,
+      8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11];
+    var RMD_KL = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+    var RMD_KR = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+
+    function rmdF(j, x, y, z) {
+      if (j < 16) return x ^ y ^ z;
+      if (j < 32) return (x & y) | (~x & z);
+      if (j < 48) return (x | ~y) ^ z;
+      if (j < 64) return (x & z) | (y & ~z);
+      return x ^ (y | ~z);
+    }
+
+    function rol(x, n) { return (x << n) | (x >>> (32 - n)); }
+
+    function ripemd160(msg) {
+      var len = msg.length;
+      var padded = new Uint8Array(((len + 8) >> 6 << 6) + 64);
+      padded.set(msg);
+      padded[len] = 0x80;
+      var bitLenLo = (len << 3) >>> 0, bitLenHi = Math.floor(len / 0x20000000);
+      var dv = new DataView(padded.buffer);
+      dv.setUint32(padded.length - 8, bitLenLo, true);
+      dv.setUint32(padded.length - 4, bitLenHi, true);
+
+      var h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+      var x = new Int32Array(16), i, j, chunk;
+
+      for (chunk = 0; chunk < padded.length; chunk += 64) {
+        for (i = 0; i < 16; i++) x[i] = dv.getInt32(chunk + i * 4, true);
+        var al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
+        var ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4], t;
+        for (j = 0; j < 80; j++) {
+          t = rol((al + rmdF(j, bl, cl, dl) + x[RMD_ZL[j]] + RMD_KL[(j / 16) | 0]) | 0, RMD_SL[j]);
+          t = (t + el) | 0;
+          al = el; el = dl; dl = rol(cl, 10); cl = bl; bl = t;
+          t = rol((ar + rmdF(79 - j, br, cr, dr) + x[RMD_ZR[j]] + RMD_KR[(j / 16) | 0]) | 0, RMD_SR[j]);
+          t = (t + er) | 0;
+          ar = er; er = dr; dr = rol(cr, 10); cr = br; br = t;
+        }
+        t = (h[1] + cl + dr) | 0;
+        h[1] = (h[2] + dl + er) | 0;
+        h[2] = (h[3] + el + ar) | 0;
+        h[3] = (h[4] + al + br) | 0;
+        h[4] = (h[0] + bl + cr) | 0;
+        h[0] = t;
       }
-      acc ^= mul(shares[i].y[b], div(num, den));
+
+      var out = new Uint8Array(20), ov = new DataView(out.buffer);
+      for (i = 0; i < 5; i++) ov.setUint32(i * 4, h[i] >>> 0, true);
+      return out;
     }
-    out[b] = acc;
-  }
-  return out;
-}
 
-/* ============================================================
-   Share envelope
+    /* ============================================================
+       secp256k1 — base point multiplication only
+    
+       Jacobian coordinates so the whole scalar multiply costs one modular
+       inverse at the end rather than one per bit.
+       ============================================================ */
 
-   PROTOTYPE ONLY. `stream()` is an xorshift32 PRNG seeded by a
-   32-bit FNV hash of the label and passphrase — it is a stand-in
-   for real key derivation and offers no confidentiality. Two
-   shares sealed with the same label and passphrase reuse the
-   same keystream. Replace this whole block before trusting the
-   output with anything real.
-   ============================================================ */
+    var P256K = BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
+    var GX = BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
+    var GY = BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
 
-var MAGIC = [0x59, 0x53, 0x31, 0x00];
+    function mod(a, m) { var r = a % m; return r < 0n ? r + m : r; }
 
-function fnv(str) {
-  var h = 0x811c9dc5;
-  for (var i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h >>> 0;
-}
-
-function stream(seed, len) {
-  var s = seed || 0x9e3779b9, o = new Uint8Array(len);
-  for (var i = 0; i < len; i++) {
-    s ^= s << 13; s >>>= 0;
-    s ^= s >>> 17;
-    s ^= s << 5; s >>>= 0;
-    o[i] = s & 0xff;
-  }
-  return o;
-}
-
-function b64(u8) { return btoa(String.fromCharCode.apply(null, Array.from(u8))); }
-
-function unb64(s) {
-  var raw = atob(s), u = new Uint8Array(raw.length);
-  for (var i = 0; i < raw.length; i++) u[i] = raw.charCodeAt(i);
-  return u;
-}
-
-var enc = new TextEncoder(), dec = new TextDecoder();
-
-// Wire format: YS1.<threshold>.<base64 label>.<base64 ciphertext>
-function sealShare(share, m, label, pass) {
-  var body = new Uint8Array(1 + share.y.length);
-  body[0] = share.x;
-  body.set(share.y, 1);
-  var ks = stream(fnv('yubishard|' + label + '|' + pass), body.length);
-  var ct = body.map(function (v, i) { return v ^ ks[i]; });
-  return 'YS1.' + m + '.' + b64(enc.encode(label)).replace(/=+$/, '') + '.' + b64(ct);
-}
-
-function openShare(text, pass) {
-  var t = (text || '').trim().replace(/\s+/g, '');
-  var p = t.split('.');
-  if (p.length !== 4 || p[0] !== 'YS1') throw new Error('That does not look like a YubiShard share.');
-  var pad = '==='.slice(0, (4 - p[2].length % 4) % 4);
-  var label = dec.decode(unb64(p[2] + pad));
-  var ct = unb64(p[3]);
-  var ks = stream(fnv('yubishard|' + label + '|' + pass), ct.length);
-  var body = ct.map(function (v, i) { return v ^ ks[i]; });
-  return { m: parseInt(p[1], 10), label: label, share: { x: body[0], y: body.slice(1) } };
-}
-
-var TEST = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
-
-/* ============================================================
-   State
-   ============================================================ */
-
-var state = {
-  dark: false, view: 'home', step: 0, count: 12, words: fill(12, ''),
-  n: 5, m: 3, keyLabel: '', pass: '', busy: false, copied: -1, copiedOk: false,
-  shares: [], sealed: [], verify: [], verifyMsg: '', verifyOk: null,
-  rm: 3, rBlobs: ['', '', ''], rIdx: 0, rParts: [], rPass: '', rError: '',
-  rSeed: '', reveal: false, seedCopied: false
-};
-
-function fill(n, v) { return Array.apply(null, Array(n)).map(function () { return v; }); }
-function setState(patch) { Object.assign(state, patch); render(); }
-function seedPhrase() {
-  return state.words.map(function (w) { return w.trim().toLowerCase(); })
-    .filter(Boolean).join(' ');
-}
-
-function fp(str) {
-  return fnv('fp|' + str).toString(16).padStart(8, '0').slice(0, 8)
-    .toUpperCase().replace(/(....)(....)/, '$1-$2');
-}
-
-/* ============================================================
-   DOM helpers
-   ============================================================ */
-
-function $(sel, root) { return (root || document).querySelector(sel); }
-
-function setText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
-
-// Never fight the caret: only write into a field the user is not editing.
-function setVal(el, v) {
-  if (el && el !== document.activeElement && el.value !== v) el.value = v;
-}
-
-function show(el, on) { if (el) el.hidden = !on; }
-
-// Grow/shrink `container` to `count` children, then update each in place.
-// Surviving nodes are never replaced, so inputs keep focus and selection.
-function syncList(container, tplId, count, update) {
-  var tpl = document.getElementById(tplId);
-  while (container.children.length > count) container.removeChild(container.lastElementChild);
-  while (container.children.length < count) {
-    container.appendChild(tpl.content.firstElementChild.cloneNode(true));
-  }
-  for (var i = 0; i < count; i++) {
-    var el = container.children[i];
-    el.dataset.i = String(i);
-    update(el, i);
-  }
-}
-
-/* ============================================================
-   Clipboard, downloads, printing
-   ============================================================ */
-
-// navigator.clipboard is unavailable or rejects on some file:// origins,
-// which is exactly where this tool is meant to run.
-function legacyCopy(text) {
-  var ta = document.createElement('textarea');
-  ta.value = text;
-  ta.setAttribute('readonly', '');
-  ta.style.position = 'fixed';
-  ta.style.top = '-1000px';
-  document.body.appendChild(ta);
-  ta.select();
-  var ok = false;
-  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-  document.body.removeChild(ta);
-  return ok;
-}
-
-function copyText(text) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(text).then(
-      function () { return true; },
-      function () { return legacyCopy(text); }
-    );
-  }
-  return Promise.resolve(legacyCopy(text));
-}
-
-function flashCopy(text, i) {
-  copyText(text).then(function (ok) {
-    setState({ copied: i, copiedOk: ok });
-    setTimeout(function () { setState({ copied: -1 }); }, 1400);
-  });
-}
-
-function copyLabel(i, base) {
-  if (state.copied !== i) return base;
-  return state.copiedOk ? 'Copied' : 'Copy failed';
-}
-
-function saveTxt(name, text) {
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-  a.download = name;
-  a.click();
-  setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
-}
-
-function shareTxt(x, i, n, m, phrase) {
-  return '# YubiShard encrypted share ' + (i + 1) + ' of ' + n + '\n'
-    + '# Any ' + m + ' of ' + n + ' shares restore the seed\n'
-    + '# YubiKey: ' + x.label + (x.pass ? '\n# A passphrase was set for this share' : '') + '\n'
-    + '# Seed fingerprint ' + fp(phrase) + '\n\n' + x.blob + '\n';
-}
-
-function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
-
-var PRINT_CSS = 'body{font:13px/1.5 Helvetica,Arial,sans-serif;margin:40px;color:#111}'
-  + 'h1{font-size:22px;margin:0}small{color:#555}'
-  + '.s{border:1px solid #bbb;border-radius:8px;padding:14px;margin-top:16px;'
-  + 'page-break-inside:avoid}h3{margin:0 0 6px;font-size:14px}'
-  + 'p{margin:0 0 8px;color:#555;font-size:12px}'
-  + 'pre{font:11px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all;'
-  + 'background:#f4f4f2;padding:10px;border-radius:6px;margin:0}';
-
-// Closing tags below are written as <\/tag> on purpose. JavaScript reads \/ as a
-// plain /, so the strings are unchanged, but the raw closing-tag text never appears
-// in this file. Two things would otherwise break it:
-//   1. The HTML parser ends this block at the first raw script end-tag, even inside
-//      a string or a comment.
-//   2. Live-reload dev servers (VS Code Live Server, live-server) splice their socket
-//      script in at the FIRST body end-tag in the response. Unescaped, that match is
-//      here rather than at the bottom of the page, so the injected markup lands in
-//      the middle of this function and takes the whole app down.
-// Returns false when a popup blocker nulls the window, so the caller can say so.
-function printSheet(rows, n, m, phrase) {
-  var w = window.open('', '_blank');
-  if (!w) return false;
-  var body = rows.map(function (r) {
-    return '<div class="s"><h3>Share ' + (r.i + 1) + ' of ' + n + ' &middot; '
-      + esc(r.x.label) + '<\/h3><p>Any ' + m + ' of ' + n
-      + ' shares restore the seed. This one opens only with the YubiKey named above'
-      + (r.x.pass ? ' and its passphrase' : '') + '.<\/p><pre>' + esc(r.x.blob)
-      + '<\/pre><\/div>';
-  }).join('');
-  w.document.write('<html><head><title>YubiShard paper backup<\/title><style>' + PRINT_CSS
-    + '<\/style><\/head><body><h1>YubiShard paper backup<\/h1><small>Fingerprint ' + fp(phrase)
-    + ' &middot; ' + m + '-of-' + n + ' &middot; ' + new Date().toISOString().slice(0, 10)
-    + '<\/small>' + body + '<\/body><\/html>');
-  w.document.close();
-  w.print();
-  return true;
-}
-
-function tryPrint(rows) {
-  var ok = printSheet(rows, state.n, state.m, seedPhrase());
-  show($('#print-msg'), !ok);
-  if (!ok) setText($('#print-msg'), 'The print window was blocked. Allow pop-ups and try again.');
-}
-
-/* ============================================================
-   Render
-   ============================================================ */
-
-function backupSteps() {
-  var seedReady = state.words.every(function (w) { return w.trim().length > 0; });
-  return [
-    { title: 'Recovery phrase', note: seedReady ? state.count + ' words entered'
-      : 'Paste your ' + state.count + '-word phrase' },
-    { title: 'Split settings', note: state.m + ' of ' + state.n + ' shares' },
-    { title: 'Encrypt shares', note: state.sealed.length + ' of ' + state.n + ' done' },
-    { title: 'Verify restore', note: 'Required — proves the copies work' },
-    { title: 'Store them apart', note: 'Print, download, wipe' }
-  ];
-}
-
-function restoreSteps() {
-  return [
-    { title: 'Collect shares', note: 'Paste ' + state.rm + ' encrypted shares' },
-    { title: 'Unlock each one', note: state.rParts.length + ' of ' + state.rm + ' unlocked' },
-    { title: 'Read your phrase', note: 'Then close the tab' }
-  ];
-}
-
-function showPanels() {
-  var v = state.view, s = state.step;
-  show($('#home'), v === 'home');
-  show($('#flow'), v !== 'home');
-  show($('#p-seed'), v === 'backup' && s === 0);
-  show($('#p-split'), v === 'backup' && s === 1);
-  show($('#p-encrypt'), v === 'backup' && s === 2);
-  show($('#p-verify'), v === 'backup' && s === 3);
-  show($('#p-done'), v === 'backup' && s === 4);
-  show($('#p-collect'), v === 'restore' && s === 0);
-  show($('#p-unlock'), v === 'restore' && s === 1);
-  show($('#p-restored'), v === 'restore' && s === 2);
-}
-
-function renderStepper() {
-  var steps = state.view === 'restore' ? restoreSteps() : backupSteps();
-  setText($('#flow-kicker'), state.view === 'restore' ? 'Restore' : 'Backup');
-  setText($('#flow-title'), state.view === 'restore' ? 'Rebuild your seed' : 'Split and seal');
-  syncList($('#stepper'), 'tpl-step', steps.length, function (el, i) {
-    var done = i < state.step, active = i === state.step;
-    el.classList.toggle('is-done', done);
-    el.classList.toggle('is-active', active);
-    setText($('.step-dot', el), done ? '✓' : String(i + 1));
-    setText($('.step-title', el), steps[i].title);
-    setText($('.step-note', el), steps[i].note);
-  });
-}
-
-function renderSeed() {
-  var filled = state.words.filter(function (w) { return w.trim(); }).length;
-  var ready = state.words.every(function (w) { return w.trim().length > 0; });
-  setText($('#word-progress'), filled + ' / ' + state.count + ' words');
-  $('#chip12').classList.toggle('is-on', state.count === 12);
-  $('#chip24').classList.toggle('is-on', state.count === 24);
-  var grid = $('#wordgrid');
-  grid.classList.toggle('cols-4', state.count === 24);
-  syncList(grid, 'tpl-word', state.count, function (el, i) {
-    setText($('.word-n', el), String(i + 1));
-    setVal($('input', el), state.words[i] || '');
-  });
-  $('#seed-next').disabled = !ready;
-  setText($('#seed-fp'), fp(seedPhrase()));
-  show($('#seed-fp-wrap'), ready);
-  show($('#seed-blocked'), !ready);
-}
-
-function renderSplit() {
-  setText($('#n-val'), String(state.n));
-  setText($('#m-val'), String(state.m));
-  setVal($('#n-range'), String(state.n));
-  $('#m-range').max = String(state.n);
-  setVal($('#m-range'), String(state.m));
-  syncList($('#viz'), 'tpl-viz', state.n, function (el, i) {
-    el.classList.toggle('is-needed', i < state.m);
-    setText($('span', el), '#' + (i + 1));
-  });
-  var sentence;
-  if (state.n === 1) {
-    sentence = 'One share, encrypted with one YubiKey. No splitting — this is a single sealed copy '
-      + 'of your seed.';
-  } else if (state.m === 1) {
-    sentence = 'Any single share rebuilds your seed on its own — convenient, but one stolen share '
-      + 'is a stolen wallet.';
-  } else {
-    sentence = 'Any ' + state.m + ' of the ' + state.n + ' shares rebuild your seed. Any '
-      + (state.m - 1) + ' reveal nothing at all.';
-  }
-  setText($('#split-sentence'), sentence);
-  setText($('#split-note'), 'You will need ' + state.n
-    + ' YubiKeys — one per share. Have them ready before you continue.');
-  setText($('#split-next'), 'Split into ' + state.n + ' shares');
-}
-
-function renderEncrypt() {
-  syncList($('#enc-rows'), 'tpl-enc-row', state.n, function (el, i) {
-    var sealed = state.sealed[i];
-    var active = !sealed && i === state.sealed.length;
-    el.classList.toggle('is-active', active);
-    el.classList.toggle('is-done', !!sealed);
-    setText($('.row-dot', el), sealed ? '✓' : String(i + 1));
-    setText($('.row-title', el), 'Share ' + (i + 1) + ' of ' + state.n);
-    setText($('.row-sub', el), sealed ? sealed.label
-      : active ? 'Plug in YubiKey #' + (i + 1) : 'Waiting');
-    var status = $('.status', el);
-    setText(status, sealed ? 'Encrypted' : active ? 'Your turn' : 'Not started');
-    status.className = 'status ' + (sealed ? 'ok' : active ? 'active' : 'idle');
-    show($('.row-body', el), active);
-    show($('.row-done', el), !!sealed);
-    if (active) {
-      setVal($('.f-label', el), state.keyLabel);
-      setVal($('.f-pass', el), state.pass);
-      $('.f-encrypt', el).disabled = state.busy;
-      show($('.spinner', el), state.busy);
-      setText($('.f-encrypt-text', el),
-        state.busy ? 'Touch your YubiKey…' : 'Encrypt with this YubiKey');
-      setText($('.f-hint', el), state.busy ? 'Waiting for challenge–response'
-        : 'Share ' + (state.sealed.length + 1) + ' of ' + state.n);
+    function modInv(a, m) {
+      // Fermat: m is prime, so a^(m-2) is the inverse.
+      var result = 1n, base = mod(a, m), e = m - 2n;
+      while (e > 0n) {
+        if (e & 1n) result = (result * base) % m;
+        base = (base * base) % m;
+        e >>= 1n;
+      }
+      return result;
     }
-    if (sealed) {
-      setText($('.blobbox', el), sealed.blob);
-      setText($('.f-copy', el), copyLabel(i, 'Copy share'));
+
+    function jacDouble(pt) {
+      var X = pt[0], Y = pt[1], Z = pt[2];
+      if (Y === 0n) return [0n, 0n, 0n];
+      var A = (Y * Y) % P256K;
+      var B = mod(4n * X * A, P256K);
+      var C = mod(8n * A * A, P256K);
+      var D = mod(3n * X * X, P256K);
+      var X3 = mod(D * D - 2n * B, P256K);
+      var Y3 = mod(D * (B - X3) - C, P256K);
+      var Z3 = mod(2n * Y * Z, P256K);
+      return [X3, Y3, Z3];
     }
-  });
-  show($('#to-verify-wrap'), state.sealed.length === state.n);
-}
 
-function renderVerify() {
-  setText($('#verify-sub'), 'Paste back ' + state.m + ' of the shares from where you saved them — '
-    + 'not from this screen. This catches a truncated copy now, instead of years from now.');
-  syncList($('#verify-rows'), 'tpl-verify-row', state.m, function (el, i) {
-    var v = state.verify[i] || {};
-    setText($('.vrow-title', el), 'Saved share ' + (i + 1));
-    setVal($('textarea', el), v.blob || '');
-    setVal($('.text', el), v.pass || '');
-  });
-  setText($('#verify-btn'), 'Check these ' + state.m + ' shares');
-  var msg = $('#verify-msg');
-  setText(msg, state.verifyMsg);
-  msg.className = 'result ' + (state.verifyOk ? 'ok' : 'err');
-}
-
-function renderDone() {
-  var phrase = seedPhrase();
-  setText($('#done-badge'), 'Verified — ' + state.m + ' of ' + state.n + ' rebuilt your seed');
-  setText($('#done-fp'), fp(phrase));
-  syncList($('#done-grid'), 'tpl-done-card', state.sealed.length, function (el, i) {
-    var x = state.sealed[i];
-    setText($('.done-num', el), '#' + (i + 1));
-    setText($('.done-label', el), x.label);
-    setText($('.done-blob', el), x.blob.slice(0, 88) + '…');
-    setText($('.f-copy', el), copyLabel(i, 'Copy'));
-  });
-}
-
-function renderCollect() {
-  setText($('#rm-val'), String(state.rm));
-  setVal($('#rm-range'), String(state.rm));
-  syncList($('#collect-rows'), 'tpl-collect-row', state.rm, function (el, i) {
-    var t = (state.rBlobs[i] || '').trim();
-    var ok = t.indexOf('YS1.') === 0 && t.split('.').length === 4;
-    el.classList.toggle('is-bad', !!t && !ok);
-    setText($('.crow-head span:first-child', el), 'Share ' + (i + 1));
-    var hint = $('.hint', el);
-    setText(hint, !t ? '' : ok ? 'Looks valid' : 'Not a YubiShard share');
-    hint.className = 'hint ' + (ok ? 'ok' : 'err');
-    setVal($('textarea', el), state.rBlobs[i] || '');
-  });
-  var ready = allCollected();
-  $('#collect-next').disabled = !ready;
-  setText($('#collect-hint'), 'All ' + state.rm + ' must be present — fewer will not work');
-}
-
-function allCollected() {
-  for (var i = 0; i < state.rm; i++) {
-    if ((state.rBlobs[i] || '').trim().indexOf('YS1.') !== 0) return false;
-  }
-  return true;
-}
-
-function renderUnlock() {
-  syncList($('#unlock-rows'), 'tpl-unlock-row', state.rm, function (el, i) {
-    var done = i < state.rParts.length, active = i === state.rParts.length;
-    el.classList.toggle('is-active', active);
-    el.classList.toggle('is-done', done);
-    setText($('.row-dot', el), done ? '✓' : String(i + 1));
-    setText($('.row-title', el), 'Share ' + (i + 1));
-    setText($('.row-sub', el), done ? state.rParts[i].label
-      : active ? 'Plug in the key for this share' : 'Waiting');
-    var status = $('.status', el);
-    setText(status, done ? 'Unlocked' : active ? 'Your turn' : 'Locked');
-    status.className = 'status ' + (done ? 'ok' : active ? 'active' : 'idle');
-    show($('.row-body', el), active);
-    if (active) {
-      setVal($('.f-pass', el), state.rPass);
-      $('.f-decrypt', el).disabled = state.busy;
-      show($('.spinner', el), state.busy);
-      setText($('.f-decrypt-text', el),
-        state.busy ? 'Touch your YubiKey…' : 'Unlock share ' + (state.rParts.length + 1));
-      setText($('.f-err', el), state.rError);
+    function jacAdd(p, q) {
+      if (p[2] === 0n) return q;
+      if (q[2] === 0n) return p;
+      var Z12 = (p[2] * p[2]) % P256K, Z22 = (q[2] * q[2]) % P256K;
+      var U1 = (p[0] * Z22) % P256K, U2 = (q[0] * Z12) % P256K;
+      var S1 = mod(p[1] * Z22 * q[2], P256K), S2 = mod(q[1] * Z12 * p[2], P256K);
+      if (U1 === U2) return S1 === S2 ? jacDouble(p) : [0n, 0n, 0n];
+      var H = mod(U2 - U1, P256K), R = mod(S2 - S1, P256K);
+      var H2 = (H * H) % P256K, H3 = (H2 * H) % P256K;
+      var X3 = mod(R * R - H3 - 2n * U1 * H2, P256K);
+      var Y3 = mod(R * (U1 * H2 - X3) - S1 * H3, P256K);
+      var Z3 = mod(H * p[2] * q[2], P256K);
+      return [X3, Y3, Z3];
     }
-  });
-}
 
-function renderRestored() {
-  var words = state.rSeed ? state.rSeed.split(' ') : [];
-  setText($('#restored-fp'), fp(state.rSeed));
-  var grid = $('#words-out');
-  grid.classList.toggle('cols-4', words.length > 12);
-  grid.classList.toggle('is-hidden', !state.reveal);
-  syncList(grid, 'tpl-word-out', words.length, function (el, i) {
-    setText($('.word-n', el), String(i + 1));
-    setText($('.value', el), words[i]);
-  });
-  setText($('#reveal-btn'), state.reveal ? 'Hide phrase' : 'Reveal phrase');
-  setText($('#copy-seed-btn'), state.seedCopied ? 'Copied' : 'Copy phrase');
-}
-
-function render() {
-  document.documentElement.toggleAttribute('data-dark', state.dark);
-  setText($('#theme-btn'), state.dark ? 'Light' : 'Dark');
-  showPanels();
-  if (state.view === 'home') return;
-  renderStepper();
-  if (state.view === 'backup') {
-    if (state.step === 0) renderSeed();
-    if (state.step === 1) renderSplit();
-    if (state.step === 2) renderEncrypt();
-    if (state.step === 3) renderVerify();
-    if (state.step === 4) renderDone();
-  } else {
-    if (state.step === 0) renderCollect();
-    if (state.step === 1) renderUnlock();
-    if (state.step === 2) renderRestored();
-  }
-}
-
-/* ============================================================
-   Actions
-   ============================================================ */
-
-function splitSecret() {
-  var phrase = seedPhrase();
-  var secret = new Uint8Array(MAGIC.concat(Array.from(enc.encode(phrase))));
-  setState({
-    shares: splitBytes(secret, state.n, state.m), sealed: [], step: 2, keyLabel: '', pass: ''
-  });
-}
-
-function doEncrypt() {
-  if (state.busy) return;
-  var i = state.sealed.length;
-  var label = state.keyLabel.trim() || 'YubiKey ' + (i + 1);
-  setState({ busy: true });
-  setTimeout(function () {
-    var blob = sealShare(state.shares[i], state.m, label, state.pass);
-    setState({
-      sealed: state.sealed.concat([{ blob: blob, label: label, pass: state.pass }]),
-      busy: false, keyLabel: '', pass: ''
-    });
-  }, 900);
-}
-
-function doVerify() {
-  var phrase = seedPhrase();
-  try {
-    var parts = state.verify.map(function (v) { return openShare(v.blob, v.pass || ''); });
-    var rebuilt = combineShares(parts.map(function (p) { return p.share; }));
-    if (!MAGIC.every(function (b, i) { return rebuilt[i] === b; })) {
-      throw new Error('Wrong passphrase, or a share was altered.');
+    // Compressed SEC encoding of k*G.
+    function pubkeyCompressed(k) {
+      var acc = [0n, 0n, 0n], add = [GX, GY, 1n];
+      while (k > 0n) {
+        if (k & 1n) acc = jacAdd(acc, add);
+        add = jacDouble(add);
+        k >>= 1n;
+      }
+      var zInv = modInv(acc[2], P256K), zInv2 = (zInv * zInv) % P256K;
+      var x = (acc[0] * zInv2) % P256K;
+      var y = mod(acc[1] * zInv2 % P256K * zInv, P256K);
+      var out = new Uint8Array(33);
+      out[0] = (y & 1n) ? 0x03 : 0x02;
+      var hex = x.toString(16).padStart(64, '0');
+      out.set(hexToBytes(hex), 1);
+      return out;
     }
-    if (dec.decode(rebuilt.slice(4)) !== phrase) {
-      throw new Error('These shares rebuild a different phrase.');
-    }
-    setState({ verifyOk: true, verifyMsg: 'Match — moving on', step: 4 });
-  } catch (err) {
-    setState({ verifyOk: false, verifyMsg: err.message });
-  }
-}
 
-function doDecrypt() {
-  if (state.busy) return;
-  setState({ busy: true });
-  setTimeout(function () {
-    var i = state.rParts.length;
-    try {
-      var p = openShare(state.rBlobs[i], state.rPass);
-      var parts = state.rParts.concat([p]);
-      if (parts.length < state.rm) {
-        setState({ rParts: parts, busy: false, rPass: '', rError: '' });
+    /* Master fingerprint: first 4 bytes of HASH160 of the master public key.
+       This is what lets a user tell, at a glance, whether a restore produced
+       the wallet they backed up. */
+    function bip32Fingerprint(seed) {
+      return hmac('SHA-512', utf8.encode('Bitcoin seed'), seed).then(function (I) {
+        var k = BigInt('0x' + bytesToHex(I.subarray(0, 32)));
+        return sha256(pubkeyCompressed(k));
+      }).then(function (h) {
+        return bytesToHex(ripemd160(h).subarray(0, 4)).toUpperCase();
+      });
+    }
+
+    /* ============================================================
+       GF(256)
+    
+       The field is generated by 3 (multiply by x+1), reduced by
+       x^8 + x^4 + x^3 + x + 1, matching SLIP-39.
+       ============================================================ */
+
+    var EXP = new Uint8Array(255), LOG = new Uint8Array(256);
+
+    (function () {
+      var poly = 1;
+      for (var i = 0; i < 255; i++) {
+        EXP[i] = poly;
+        LOG[poly] = i;
+        poly = (poly << 1) ^ poly;
+        if (poly & 0x100) poly ^= 0x11b;
+        poly &= 0xff;
+      }
+    })();
+
+    /* Lagrange interpolation of the shares at an arbitrary x. SLIP-39 needs
+       x = 255 for the secret and x = 254 for the digest, not just x = 0. */
+    function interpolate(shares, x) {
+      var len = shares[0].y.length, i, j, k;
+      for (i = 0; i < shares.length; i++) {
+        if (shares[i].x === x) return new Uint8Array(shares[i].y);
+      }
+      var logProd = 0;
+      for (i = 0; i < shares.length; i++) logProd += LOG[x ^ shares[i].x];
+
+      var out = new Uint8Array(len);
+      for (i = 0; i < shares.length; i++) {
+        var sum = 0;
+        for (j = 0; j < shares.length; j++) sum += LOG[shares[i].x ^ shares[j].x];
+        // JS % keeps the sign of the dividend, so normalise into [0, 255).
+        var basis = (((logProd - LOG[x ^ shares[i].x] - sum) % 255) + 255) % 255;
+        for (k = 0; k < len; k++) {
+          var y = shares[i].y[k];
+          if (y !== 0) out[k] ^= EXP[(LOG[y] + basis) % 255];
+        }
+      }
+      return out;
+    }
+
+    /* ============================================================
+       RS1024 checksum
+       ============================================================ */
+
+    var RS_GEN = [
+      0xe0e040, 0x1c1c080, 0x3838100, 0x7070200, 0xe0e0009,
+      0x1c0c2412, 0x38086c24, 0x3090fc48, 0x21b1f890, 0x3f3f120];
+
+    var CS_EXTENDABLE = 'shamir_extendable';
+    var CS_NON_EXTENDABLE = 'shamir';
+
+    function customizationValues(ext) {
+      var s = ext ? CS_EXTENDABLE : CS_NON_EXTENDABLE, out = [], i;
+      for (i = 0; i < s.length; i++) out.push(s.charCodeAt(i));
+      return out;
+    }
+
+    function rs1024Polymod(values) {
+      var chk = 1, i, j;
+      for (i = 0; i < values.length; i++) {
+        var b = chk >> 20;
+        chk = ((chk & 0xfffff) << 10) ^ values[i];
+        for (j = 0; j < 10; j++) if ((b >> j) & 1) chk ^= RS_GEN[j];
+      }
+      return chk;
+    }
+
+    function rs1024Checksum(data, ext) {
+      var values = customizationValues(ext).concat(data, [0, 0, 0]);
+      var polymod = rs1024Polymod(values) ^ 1;
+      return [(polymod >> 20) & 1023, (polymod >> 10) & 1023, polymod & 1023];
+    }
+
+    function rs1024Verify(data, ext) {
+      return rs1024Polymod(customizationValues(ext).concat(data)) === 1;
+    }
+
+    /* ============================================================
+       SLIP-39 mnemonic encoding
+    
+       Bit layout: id 15 | ext 1 | e 4 | group index 4 | group threshold 4
+       | group count 4 | member index 4 | member threshold 4, then the share
+       value left-padded to a multiple of 10 bits, then 3 checksum words.
+       Thresholds and counts are stored one less than their value.
+       ============================================================ */
+
+    var METADATA_WORDS = 7;   // 4 words of header + 3 of checksum
+    var DIGEST_INDEX = 254;
+    var SECRET_INDEX = 255;
+    var DIGEST_BYTES = 4;
+    var BASE_ITERATIONS = 10000;
+    var ROUNDS = 4;
+
+    function pushBits(bits, value, count) {
+      for (var i = count - 1; i >= 0; i--) bits.push((value >> i) & 1);
+    }
+
+    function encodeMnemonic(s) {
+      var bits = [], i;
+      pushBits(bits, s.id, 15);
+      pushBits(bits, s.ext ? 1 : 0, 1);
+      pushBits(bits, s.e, 4);
+      pushBits(bits, s.groupIndex, 4);
+      pushBits(bits, s.groupThreshold - 1, 4);
+      pushBits(bits, s.groupCount - 1, 4);
+      pushBits(bits, s.memberIndex, 4);
+      pushBits(bits, s.memberThreshold - 1, 4);
+
+      var valueBits = s.value.length * 8;
+      var valueWords = Math.ceil(valueBits / 10);
+      for (i = 0; i < valueWords * 10 - valueBits; i++) bits.push(0);
+      for (i = 0; i < s.value.length; i++) pushBits(bits, s.value[i], 8);
+
+      var idx = [];
+      for (i = 0; i < bits.length; i += 10) {
+        var w = 0;
+        for (var j = 0; j < 10; j++) w = (w << 1) | bits[i + j];
+        idx.push(w);
+      }
+      idx = idx.concat(rs1024Checksum(idx, s.ext));
+      return idx.map(function (w) { return SLIP39_WORDS[w]; }).join(' ');
+    }
+
+    function decodeMnemonic(mnemonic) {
+      var words = String(mnemonic).toLowerCase().trim().split(/\s+/).filter(Boolean);
+      if (words.length < 20) throw new Error('A share must be at least 20 words.');
+
+      var idx = words.map(function (w) {
+        var i = SLIP39_WORDS.indexOf(w);
+        if (i < 0) throw new Error('"' + w + '" is not a SLIP-39 word.');
+        return i;
+      });
+
+      // The extendable flag selects the checksum's customization string, so it has
+      // to be read before the checksum can be verified. The second word holds the
+      // low 5 bits of the id, then ext, then the 4-bit iteration exponent.
+      var ext = (idx[1] >> 4) & 1;
+      if (!rs1024Verify(idx, ext)) throw new Error('This share failed its checksum — check for a mistyped word.');
+
+      var bits = [], i, j;
+      for (i = 0; i < idx.length; i++) pushBits(bits, idx[i], 10);
+      var at = 0;
+      function take(n) { var v = 0; for (var k = 0; k < n; k++) v = (v << 1) | bits[at++]; return v; }
+
+      var out = {
+        id: take(15),
+        ext: take(1) === 1,
+        e: take(4),
+        groupIndex: take(4),
+        groupThreshold: take(4) + 1,
+        groupCount: take(4) + 1,
+        memberIndex: take(4),
+        memberThreshold: take(4) + 1
+      };
+      if (out.groupThreshold > out.groupCount) {
+        throw new Error('Invalid share: group threshold exceeds group count.');
+      }
+
+      // The secret is a whole number of 16-bit units, so the padding is
+      // whatever the 10-bit words carry beyond that.
+      var valueWords = words.length - METADATA_WORDS;
+      var padding = (valueWords * 10) % 16;
+      if (padding > 8) throw new Error('Invalid share length.');
+      for (i = 0; i < padding; i++) {
+        if (bits[at + i] !== 0) throw new Error('Invalid share: padding bits are not zero.');
+      }
+      at += padding;
+
+      var valueBytes = (valueWords * 10 - padding) / 8;
+      var value = new Uint8Array(valueBytes);
+      for (i = 0; i < valueBytes; i++) value[i] = take(8);
+      out.value = value;
+      return out;
+    }
+
+    /* ============================================================
+       Master-secret encryption
+    
+       Four-round Feistel with PBKDF2-HMAC-SHA256 as the round function.
+       In extendable mode the salt is empty, so nothing has to travel
+       alongside the share to decrypt it later.
+       ============================================================ */
+
+    function encryptionSalt(id, ext) {
+      if (ext) return new Uint8Array(0);
+      return concatBytes(utf8.encode(CS_NON_EXTENDABLE), new Uint8Array([id >> 8, id & 0xff]));
+    }
+
+    function roundFunction(i, passphrase, e, salt, r) {
+      var password = concatBytes(new Uint8Array([i]), passphrase);
+      var iterations = (BASE_ITERATIONS << e) / ROUNDS;
+      return pbkdf2('SHA-256', password, concatBytes(salt, r), iterations, r.length);
+    }
+
+    function feistel(data, passphrase, e, id, ext, forward) {
+      var half = data.length / 2;
+      var l = data.subarray(0, half), r = data.subarray(half);
+      var salt = encryptionSalt(id, ext);
+      var order = [];
+      for (var i = 0; i < ROUNDS; i++) order.push(forward ? i : ROUNDS - 1 - i);
+
+      return order.reduce(function (chain, i) {
+        return chain.then(function () {
+          return roundFunction(i, passphrase, e, salt, r);
+        }).then(function (f) {
+          var next = xorBytes(l, f);
+          l = r; r = next;
+        });
+      }, Promise.resolve()).then(function () {
+        return concatBytes(r, l);
+      });
+    }
+
+    function encryptMasterSecret(secret, passphrase, e, id, ext) {
+      return feistel(secret, passphrase, e, id, ext, true);
+    }
+
+    function decryptMasterSecret(ems, passphrase, e, id, ext) {
+      return feistel(ems, passphrase, e, id, ext, false);
+    }
+
+    /* ============================================================
+       Shamir split and recover
+       ============================================================ */
+
+    function createDigest(randomPart, sharedSecret) {
+      return hmac('SHA-256', randomPart, sharedSecret).then(function (mac) {
+        return mac.subarray(0, DIGEST_BYTES);
+      });
+    }
+
+    function splitSecret(threshold, count, secret) {
+      if (threshold < 1 || threshold > count || count > 16) {
+        return Promise.reject(new Error('Invalid threshold or share count.'));
+      }
+      if (threshold === 1) {
+        var copies = [];
+        for (var i = 0; i < count; i++) copies.push({ x: i, y: new Uint8Array(secret) });
+        return Promise.resolve(copies);
+      }
+
+      var randomCount = threshold - 2, shares = [], j;
+      for (j = 0; j < randomCount; j++) shares.push({ x: j, y: randomBytes(secret.length) });
+      var randomPart = randomBytes(secret.length - DIGEST_BYTES);
+
+      return createDigest(randomPart, secret).then(function (digest) {
+        var base = shares.concat([
+          { x: DIGEST_INDEX, y: concatBytes(digest, randomPart) },
+          { x: SECRET_INDEX, y: secret }
+        ]);
+        for (var k = randomCount; k < count; k++) {
+          shares.push({ x: k, y: interpolate(base, k) });
+        }
+        return shares;
+      });
+    }
+
+    function recoverSecret(threshold, shares) {
+      if (threshold === 1) return Promise.resolve(new Uint8Array(shares[0].y));
+      var secret = interpolate(shares, SECRET_INDEX);
+      var digestShare = interpolate(shares, DIGEST_INDEX);
+      var digest = digestShare.subarray(0, DIGEST_BYTES);
+      var randomPart = digestShare.subarray(DIGEST_BYTES);
+      return createDigest(randomPart, secret).then(function (expected) {
+        if (bytesToHex(expected) !== bytesToHex(digest)) {
+          throw new Error('These shares do not belong together.');
+        }
+        return secret;
+      });
+    }
+
+    /* ============================================================
+       Public API — single group, threshold of count
+       ============================================================ */
+
+    function generateShares(secret, threshold, count, passphrase, e) {
+      if (secret.length < 16 || secret.length % 2 !== 0) {
+        return Promise.reject(new Error('The secret must be at least 128 bits and a whole number of 16-bit units.'));
+      }
+      var idBytes = randomBytes(2);
+      var id = ((idBytes[0] << 8) | idBytes[1]) & 0x7fff;
+      var exp = e === undefined ? 1 : e;
+      var pass = passphrase ? utf8.encode(passphrase) : new Uint8Array(0);
+
+      return encryptMasterSecret(secret, pass, exp, id, true).then(function (ems) {
+        return splitSecret(threshold, count, ems);
+      }).then(function (shares) {
+        return shares.map(function (s) {
+          return encodeMnemonic({
+            id: id, ext: true, e: exp,
+            groupIndex: 0, groupThreshold: 1, groupCount: 1,
+            memberIndex: s.x, memberThreshold: threshold, value: s.y
+          });
+        });
+      });
+    }
+
+    function combineMnemonics(mnemonics, passphrase) {
+      if (!mnemonics || !mnemonics.length) return Promise.reject(new Error('No shares given.'));
+
+      var decoded = mnemonics.map(decodeMnemonic);
+      var first = decoded[0], i;
+      for (i = 1; i < decoded.length; i++) {
+        var d = decoded[i];
+        if (d.id !== first.id || d.ext !== first.ext || d.e !== first.e ||
+          d.groupThreshold !== first.groupThreshold || d.groupCount !== first.groupCount) {
+          throw new Error('These shares come from different backups.');
+        }
+      }
+
+      // Bucket by group, then recover each group secret from its members.
+      var groups = {};
+      decoded.forEach(function (d) {
+        var g = groups[d.groupIndex] || (groups[d.groupIndex] = { threshold: d.memberThreshold, members: [] });
+        if (g.threshold !== d.memberThreshold) throw new Error('Inconsistent member thresholds within a group.');
+        if (g.members.some(function (m) { return m.x === d.memberIndex; })) {
+          throw new Error('The same share was supplied twice.');
+        }
+        g.members.push({ x: d.memberIndex, y: d.value });
+      });
+
+      var indices = Object.keys(groups);
+      var usable = indices.filter(function (gi) {
+        return groups[gi].members.length >= groups[gi].threshold;
+      });
+      if (usable.length < first.groupThreshold) {
+        throw new Error('Not enough shares — need ' + first.groupThreshold +
+          ' group' + (first.groupThreshold === 1 ? '' : 's') + '.');
+      }
+      usable = usable.slice(0, first.groupThreshold);
+
+      indices.forEach(function (gi) {
+        var g = groups[gi];
+        if (g.members.length !== g.threshold && usable.indexOf(gi) >= 0) {
+          throw new Error('Wrong number of shares for group ' + gi + '.');
+        }
+      });
+
+      return Promise.all(usable.map(function (gi) {
+        var g = groups[gi];
+        return recoverSecret(g.threshold, g.members).then(function (y) {
+          return { x: Number(gi), y: y };
+        });
+      })).then(function (groupShares) {
+        return recoverSecret(first.groupThreshold, groupShares);
+      }).then(function (ems) {
+        var pass = passphrase ? utf8.encode(passphrase) : new Uint8Array(0);
+        return decryptMasterSecret(ems, pass, first.e, first.id, first.ext);
+      });
+    }
+
+    /* ============================================================
+       BIP-39
+       ============================================================ */
+
+    function bip39ToEntropy(phrase) {
+      var words = String(phrase).toLowerCase().trim().split(/\s+/).filter(Boolean);
+      if ([12, 15, 18, 21, 24].indexOf(words.length) < 0) {
+        throw new Error('A BIP-39 phrase must be 12, 15, 18, 21 or 24 words.');
+      }
+      var bits = [];
+      words.forEach(function (w) {
+        var i = BIP39_WORDS.indexOf(w);
+        if (i < 0) throw new Error('"' + w + '" is not a BIP-39 word.');
+        pushBits(bits, i, 11);
+      });
+      var checkBits = bits.length / 33;
+      var entBits = bits.length - checkBits;
+      var entropy = new Uint8Array(entBits / 8), i;
+      for (i = 0; i < entropy.length; i++) {
+        var v = 0;
+        for (var j = 0; j < 8; j++) v = (v << 1) | bits[i * 8 + j];
+        entropy[i] = v;
+      }
+      return sha256(entropy).then(function (h) {
+        for (var k = 0; k < checkBits; k++) {
+          if (((h[k >> 3] >> (7 - (k & 7))) & 1) !== bits[entBits + k]) {
+            throw new Error('That phrase fails its BIP-39 checksum — check for a mistyped word.');
+          }
+        }
+        return entropy;
+      });
+    }
+
+    function bip39FromEntropy(entropy) {
+      return sha256(entropy).then(function (h) {
+        var bits = [], i;
+        for (i = 0; i < entropy.length; i++) pushBits(bits, entropy[i], 8);
+        var checkBits = entropy.length * 8 / 32;
+        for (i = 0; i < checkBits; i++) bits.push((h[i >> 3] >> (7 - (i & 7))) & 1);
+        var words = [];
+        for (i = 0; i < bits.length; i += 11) {
+          var v = 0;
+          for (var j = 0; j < 11; j++) v = (v << 1) | bits[i + j];
+          words.push(BIP39_WORDS[v]);
+        }
+        return words.join(' ');
+      });
+    }
+
+    function bip39Seed(phrase, passphrase) {
+      var norm = String(phrase).normalize('NFKD');
+      var salt = ('mnemonic' + String(passphrase || '')).normalize('NFKD');
+      return pbkdf2('SHA-512', utf8.encode(norm), utf8.encode(salt), 2048, 64);
+    }
+
+    /* ============================================================
+       WebAuthn largeBlob
+    
+       Each YubiKey holds one discoverable credential and one blob, bound to
+       this page's hostname. A credential cannot be read from any other
+       origin, so enrolling at localhost and enrolling at a website produce
+       two separate, non-interchangeable backups.
+       ============================================================ */
+
+    var RECORD_VERSION = 1;
+    var BLOB_BUDGET = 900;   // spec guarantees >= 1024 serialized; leave headroom
+
+    function rpId() { return location.hostname; }
+
+    function challenge() { return crypto.getRandomValues(new Uint8Array(32)); }
+
+    function friendlyAuthError(e) {
+      if (!e) return new Error('The key did not respond.');
+      if (e.name === 'NotAllowedError') {
+        return new Error('Cancelled, or the key was not touched in time. Try again.');
+      }
+      if (e.name === 'NotSupportedError') {
+        return new Error('This browser or key cannot do what YubiShard needs. Use Chrome with a '
+          + 'YubiKey on firmware 5.5 or newer.');
+      }
+      if (e.name === 'SecurityError') {
+        return new Error('This page\'s address cannot be used with a security key. Open it as '
+          + 'http://localhost:8000/ — not as a file, and not by IP address.');
+      }
+      return e;
+    }
+
+    /* Creation and the blob write are two separate ceremonies: WebAuthn only
+       writes a large blob during an assertion, never at registration. That is why
+       the key asks for its PIN and a touch twice. */
+    function writeShareToKey(record) {
+      var bytes = utf8.encode(JSON.stringify(record));
+      if (bytes.length > BLOB_BUDGET) {
+        return Promise.reject(new Error('That label is too long to fit alongside the share.'));
+      }
+      return navigator.credentials.create({
+        publicKey: {
+          challenge: challenge(),
+          rp: { id: rpId(), name: 'YubiShard' },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: 'YubiShard share-' + (record.i + 1) + '-of-' + record.n,
+            displayName: record.label
+          },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: {
+            authenticatorAttachment: 'cross-platform',
+            residentKey: 'required',
+            userVerification: 'required'
+          },
+          timeout: 120000,
+          attestation: 'none',
+          extensions: { largeBlob: { support: 'required' } }
+        }
+      }).then(function (cred) {
+        if (!cred) throw new Error('The key did not return a credential.');
+        var ext = cred.getClientExtensionResults();
+        if (!ext.largeBlob || ext.largeBlob.supported !== true) {
+          throw new Error('This key cannot store a share. largeBlob needs YubiKey firmware 5.5 or '
+            + 'newer — check yours with "ykman fido info".');
+        }
+        return navigator.credentials.get({
+          publicKey: {
+            challenge: challenge(),
+            rpId: rpId(),
+            allowCredentials: [{ type: 'public-key', id: cred.rawId }],
+            userVerification: 'required',
+            timeout: 120000,
+            extensions: { largeBlob: { write: bytes } }
+          }
+        });
+      }).then(function (assertion) {
+        var ext = assertion && assertion.getClientExtensionResults();
+        if (!ext || !ext.largeBlob || ext.largeBlob.written !== true) {
+          throw new Error('The share was not written. Leave the key inserted and try again.');
+        }
+        return true;
+      }).catch(function (e) { throw friendlyAuthError(e); });
+    }
+
+    function readShareFromKey() {
+      return navigator.credentials.get({
+        publicKey: {
+          challenge: challenge(),
+          rpId: rpId(),
+          allowCredentials: [],
+          userVerification: 'required',
+          timeout: 120000,
+          extensions: { largeBlob: { read: true } }
+        }
+      }).then(function (assertion) {
+        var ext = assertion && assertion.getClientExtensionResults();
+        if (!ext || !ext.largeBlob || !ext.largeBlob.blob) {
+          // A key enrolled at a different origin is indistinguishable from a blank
+          // one here, so the message has to cover both.
+          throw new Error('No YubiShard share on this key for ' + rpId() + '. If you enrolled it at '
+            + 'the other address, open that one instead.');
+        }
+        var rec;
+        try { rec = JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob))); }
+        catch (e) { rec = null; }
+        if (!rec || rec.v !== RECORD_VERSION || !rec.share) {
+          throw new Error('What is stored on this key is not a YubiShard share.');
+        }
+        return rec;
+      }).catch(function (e) { throw friendlyAuthError(e); });
+    }
+
+    /* ============================================================
+       Environment
+    
+       file:// is a secure context, so crypto.subtle works there — but it has
+       no hostname, and WebAuthn derives its relying-party ID from one. That
+       is the reason a server is required, not TLS.
+       ============================================================ */
+
+    function envReport() {
+      if (location.protocol === 'file:') {
+        return {
+          ok: false, html: '<b>This page needs a web address.</b> A security key identifies a '
+            + 'site by its hostname, and a <code>file://</code> URL has none — so no key can be used '
+            + 'here. Run <code>serve.command</code> (macOS) or <code>serve.bat</code> (Windows) from '
+            + 'this folder and open <code>http://localhost:8000/</code>.'
+        };
+      }
+      if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials) {
+        return {
+          ok: false, html: '<b>This browser cannot use security keys here.</b> YubiShard needs '
+            + 'Chrome on macOS or Windows 11, opened over <code>http://localhost</code> or https.'
+        };
+      }
+      var host = location.hostname;
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.indexOf(':') >= 0) {
+        return {
+          ok: false, html: '<b>Use <code>localhost</code>, not an IP address.</b> A bare IP can '
+            + 'never identify a site to a security key. Open <code>http://localhost:'
+            + (location.port || '8000') + '/</code> instead.'
+        };
+      }
+      var parts = [];
+      if (!window.chrome) {
+        parts.push('<b>This browser is probably not supported.</b> Storing a share on a key uses the '
+          + 'largeBlob extension, which Firefox does not implement and does not plan to. Use Chrome.');
+      }
+      parts.push('Keys enrolled here are tied to <b><code>' + esc(host) + '</code></b> and can only be '
+        + 'read back at this same address.');
+      if (host !== 'localhost') {
+        parts.push('<b>You are running this from a website.</b> The code reached you over the network '
+          + 'moments before your seed enters this tab\'s memory, and if this domain ever lapses the '
+          + 'shares on those keys can never be read again. Serving the file locally avoids both.');
+      }
+      return { ok: true, html: parts.join(' ') };
+    }
+
+    /* ============================================================
+       State
+       ============================================================ */
+
+    var state = {
+      dark: false, view: 'home', step: 0,
+
+      // phrase entry
+      count: 12, words: fill(12, ''), inputPass: '',
+      secret: null, seedFp: '', seedErr: '',
+
+      // split
+      n: 5, m: 3, shares: [],
+
+      // writing shares onto keys
+      written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1,
+
+      // read-back gate
+      vRecords: [], verifyMsg: '', verifyOk: null,
+
+      // restore
+      rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
+      rSeed: '', rFp: '', rKind: '', rAlt: '',
+      reveal: false, seedCopied: false,
+
+      env: envReport()
+    };
+
+    function fill(n, v) { return Array.apply(null, Array(n)).map(function () { return v; }); }
+    function setState(patch) { Object.assign(state, patch); render(); }
+
+    function seedPhrase() {
+      return state.words.map(function (w) { return w.trim().toLowerCase(); })
+        .filter(Boolean).join(' ');
+    }
+
+    function allWordsIn() { return state.words.every(function (w) { return w.trim().length > 0; }); }
+
+    /* 20 words is a SLIP-39 master secret; 12 and 24 are BIP-39 entropy. The two
+       are not interchangeable — see the note under the passphrase field. */
+    function isSlip39() { return state.count === 20; }
+
+    function standardLabel() {
+      if (state.count === 20) return 'SLIP-39 · 128-bit master secret';
+      return 'BIP-39 · ' + (state.count === 12 ? '128' : '256') + '-bit entropy';
+    }
+
+    function originKind() {
+      if (state.count === 20) return 'slip39-128';
+      return state.count === 12 ? 'bip39-128' : 'bip39-256';
+    }
+
+    /* ============================================================
+       DOM helpers
+       ============================================================ */
+
+    function $(sel, root) { return (root || document).querySelector(sel); }
+
+    function setText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
+
+    // Never fight the caret: only write into a field the user is not editing.
+    function setVal(el, v) {
+      if (el && el !== document.activeElement && el.value !== v) el.value = v;
+    }
+
+    function show(el, on) { if (el) el.hidden = !on; }
+
+    function esc(t) {
+      return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Grow/shrink `container` to `count` children, then update each in place.
+    // Surviving nodes are never replaced, so inputs keep focus and selection.
+    function syncList(container, tplId, count, update) {
+      var tpl = document.getElementById(tplId);
+      while (container.children.length > count) container.removeChild(container.lastElementChild);
+      while (container.children.length < count) {
+        container.appendChild(tpl.content.firstElementChild.cloneNode(true));
+      }
+      for (var i = 0; i < count; i++) {
+        var el = container.children[i];
+        el.dataset.i = String(i);
+        update(el, i);
+      }
+    }
+
+    /* ============================================================
+       Clipboard
+       ============================================================ */
+
+    // navigator.clipboard is unavailable or rejects on some origins.
+    function legacyCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).then(
+          function () { return true; },
+          function () { return legacyCopy(text); }
+        );
+      }
+      return Promise.resolve(legacyCopy(text));
+    }
+
+    /* ============================================================
+       Reading the entered phrase
+    
+       Async because both branches end in WebCrypto. A token guards against an
+       older keystroke's result landing after a newer one.
+       ============================================================ */
+
+    var seedToken = 0;
+
+    function readEnteredSeed() {
+      var phrase = seedPhrase(), pass = state.inputPass;
+      if (isSlip39()) {
+        // A Trezor single-share backup is a 20-word 1-of-1 SLIP-39 mnemonic, and
+        // its master secret is the BIP-32 seed directly.
+        return combineMnemonics([phrase], pass).then(function (secret) {
+          return { secret: secret, seed: secret };
+        });
+      }
+      // BIP-39 runs the words through PBKDF2 to reach the seed, so the entropy we
+      // split and the seed we fingerprint are different values.
+      return bip39ToEntropy(phrase).then(function (entropy) {
+        return bip39Seed(phrase, pass).then(function (seed) {
+          return { secret: entropy, seed: seed };
+        });
+      });
+    }
+
+    function refreshSeed() {
+      var token = ++seedToken;
+      if (!allWordsIn()) {
+        if (state.secret || state.seedFp || state.seedErr) {
+          setState({ secret: null, seedFp: '', seedErr: '' });
+        }
         return;
       }
-      var rebuilt = combineShares(parts.map(function (q) { return q.share; }));
-      if (!MAGIC.every(function (b, k) { return rebuilt[k] === b; })) {
-        throw new Error('One of the passphrases is wrong, or a share was mistyped.');
-      }
-      setState({
-        rParts: parts, busy: false, rSeed: dec.decode(rebuilt.slice(4)), step: 2, reveal: false
+      readEnteredSeed().then(function (r) {
+        if (token !== seedToken) return;
+        setState({ secret: r.secret, seedErr: '' });
+        return bip32Fingerprint(r.seed).then(function (f) {
+          if (token === seedToken) setState({ seedFp: f });
+        });
+      }).catch(function (e) {
+        if (token === seedToken) setState({ secret: null, seedFp: '', seedErr: e.message });
       });
-    } catch (err) {
-      setState({ busy: false, rError: err.message });
     }
-  }, 900);
-}
 
-function wipe() {
-  setState({
-    view: 'home', step: 0, words: fill(12, ''), count: 12, shares: [], sealed: [],
-    verify: [], verifyMsg: '', verifyOk: null, rBlobs: ['', '', ''], rm: 3, rParts: [],
-    rSeed: '', reveal: false, keyLabel: '', pass: '', rPass: '', rError: ''
-  });
-}
+    /* ============================================================
+       Render
+       ============================================================ */
 
-var CLICKS = {
-  home: function () { setState({ view: 'home' }); },
-  theme: function () { setState({ dark: !state.dark }); },
-  backup: function () { setState({ view: 'backup', step: 0 }); },
-  restore: function () { setState({ view: 'restore', step: 0 }); },
-  back: function () { setState({ step: Math.max(0, state.step - 1) }); },
-  count12: function () { setState({ count: 12, words: fill(12, '') }); },
-  count24: function () { setState({ count: 24, words: fill(24, '') }); },
-  demo: function () { setState({ count: 12, words: TEST.slice() }); },
-  'seed-next': function () {
-    if (state.words.every(function (w) { return w.trim().length > 0; })) setState({ step: 1 });
-  },
-  'split-next': splitSecret,
-  encrypt: doEncrypt,
-  'to-verify': function () {
-    setState({ step: 3, verify: fill(state.m, 0).map(function () {
-      return { blob: '', pass: '' };
-    }), verifyMsg: '', verifyOk: null });
-  },
-  verify: doVerify,
-  'copy-share': function (i) { flashCopy(state.sealed[i].blob, i); },
-  'dl-share': function (i) {
-    saveTxt('yubishard-share-' + (i + 1) + '.txt', state.sealed[i].blob + '\n');
-  },
-  'dl-share-full': function (i) {
-    saveTxt('yubishard-share-' + (i + 1) + '-of-' + state.n + '.txt',
-      shareTxt(state.sealed[i], i, state.n, state.m, seedPhrase()));
-  },
-  'print-one': function (i) { tryPrint([{ x: state.sealed[i], i: i }]); },
-  'print-all': function () {
-    tryPrint(state.sealed.map(function (x, i) { return { x: x, i: i }; }));
-  },
-  'download-all': function () {
-    var phrase = seedPhrase();
-    saveTxt('yubishard-shares-' + state.m + 'of' + state.n + '.txt',
-      '# YubiShard backup — any ' + state.m + ' of ' + state.n + ' shares restore the seed\n'
-      + '# Fingerprint ' + fp(phrase) + ' · ' + new Date().toISOString().slice(0, 10) + '\n\n'
-      + state.sealed.map(function (x, i) {
-        return '## Share ' + (i + 1) + ' of ' + state.n + ' — YubiKey: ' + x.label + '\n' + x.blob;
-      }).join('\n\n') + '\n');
-  },
-  // Staggered: browsers drop simultaneous downloads from one gesture.
-  'download-each': function () {
-    var phrase = seedPhrase();
-    state.sealed.forEach(function (x, i) {
-      setTimeout(function () {
-        saveTxt('yubishard-share-' + (i + 1) + '-of-' + state.n + '.txt',
-          shareTxt(x, i, state.n, state.m, phrase));
-      }, i * 220);
-    });
-  },
-  wipe: wipe,
-  'collect-next': function () {
-    if (allCollected()) setState({ step: 1, rParts: [], rPass: '', rError: '' });
-  },
-  decrypt: doDecrypt,
-  reveal: function () { setState({ reveal: !state.reveal }); },
-  'copy-seed': function () {
-    copyText(state.rSeed).then(function (ok) {
-      setState({ seedCopied: ok });
-      setTimeout(function () { setState({ seedCopied: false }); }, 1400);
-    });
-  }
-};
-
-var INPUTS = {
-  word: function (i, v) {
-    var w = state.words.slice();
-    w[i] = v;
-    setState({ words: w });
-  },
-  n: function (i, v) {
-    var n = +v;
-    setState({ n: n, m: Math.min(state.m, n) });
-  },
-  m: function (i, v) { setState({ m: Math.min(+v, state.n) }); },
-  keylabel: function (i, v) { setState({ keyLabel: v }); },
-  pass: function (i, v) { setState({ pass: v }); },
-  vblob: function (i, v) {
-    var arr = state.verify.slice();
-    arr[i] = Object.assign({ blob: '', pass: '' }, arr[i], { blob: v });
-    setState({ verify: arr, verifyMsg: '' });
-  },
-  vpass: function (i, v) {
-    var arr = state.verify.slice();
-    arr[i] = Object.assign({ blob: '', pass: '' }, arr[i], { pass: v });
-    setState({ verify: arr, verifyMsg: '' });
-  },
-  rm: function (i, v) {
-    var rm = +v, b = state.rBlobs.slice();
-    while (b.length < rm) b.push('');
-    setState({ rm: rm, rBlobs: b });
-  },
-  // Pasting into the first box tells us the threshold, so grow the list to match.
-  rblob: function (i, v) {
-    var b = state.rBlobs.slice();
-    b[i] = v;
-    var rm = state.rm;
-    var p = v.trim().split('.');
-    if (i === 0 && p[0] === 'YS1' && +p[1] >= 1 && +p[1] <= 10) {
-      rm = +p[1];
-      while (b.length < rm) b.push('');
+    function backupSteps() {
+      return [
+        {
+          title: 'Recovery phrase', note: allWordsIn() ? state.count + ' words entered'
+            : 'Enter your ' + state.count + '-word phrase'
+        },
+        { title: 'Split settings', note: state.m + ' of ' + state.n + ' keys' },
+        { title: 'Write to keys', note: state.written.length + ' of ' + state.n + ' written' },
+        { title: 'Verify restore', note: 'Required — proves the keys work' },
+        { title: 'Store them apart', note: 'Different places, then wipe' }
+      ];
     }
-    setState({ rBlobs: b, rm: rm });
-  },
-  rpass: function (i, v) { setState({ rPass: v, rError: '' }); }
-};
 
-/* ============================================================
-   Wiring
-   ============================================================ */
+    function restoreSteps() {
+      return [
+        {
+          title: 'Read your keys', note: state.rRecords.length
+            ? state.rRecords.length + ' of ' + state.rRecords[0].m + ' read' : 'One key at a time'
+        },
+        { title: 'Read your phrase', note: 'Then close the tab' }
+      ];
+    }
 
-function indexOf(el) {
-  var row = el.closest('[data-i]');
-  return row ? +row.dataset.i : -1;
-}
+    function showPanels() {
+      var v = state.view, s = state.step;
+      show($('#home'), v === 'home');
+      show($('#flow'), v !== 'home');
+      show($('#p-seed'), v === 'backup' && s === 0);
+      show($('#p-split'), v === 'backup' && s === 1);
+      show($('#p-encrypt'), v === 'backup' && s === 2);
+      show($('#p-verify'), v === 'backup' && s === 3);
+      show($('#p-done'), v === 'backup' && s === 4);
+      show($('#p-collect'), v === 'restore' && s === 0);
+      show($('#p-restored'), v === 'restore' && s === 1);
+    }
 
-document.addEventListener('click', function (e) {
-  var t = e.target.closest('[data-act]');
-  if (!t || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
-  var fn = CLICKS[t.dataset.act];
-  if (!fn) return;
-  if (t.tagName === 'A') e.preventDefault();
-  fn(indexOf(t));
-});
+    function renderStepper() {
+      var steps = state.view === 'restore' ? restoreSteps() : backupSteps();
+      setText($('#flow-kicker'), state.view === 'restore' ? 'Restore' : 'Backup');
+      setText($('#flow-title'), state.view === 'restore' ? 'Rebuild your seed' : 'Split onto keys');
+      syncList($('#stepper'), 'tpl-step', steps.length, function (el, i) {
+        var done = i < state.step, active = i === state.step;
+        el.classList.toggle('is-done', done);
+        el.classList.toggle('is-active', active);
+        setText($('.step-dot', el), done ? '✓' : String(i + 1));
+        setText($('.step-title', el), steps[i].title);
+        setText($('.step-note', el), steps[i].note);
+      });
+    }
 
-document.addEventListener('input', function (e) {
-  var t = e.target.closest('[data-act]');
-  if (!t) return;
-  var fn = INPUTS[t.dataset.act];
-  if (fn) fn(indexOf(t), t.value);
-});
+    function renderSeed() {
+      var filled = state.words.filter(function (w) { return w.trim(); }).length;
+      setText($('#word-progress'), filled + ' / ' + state.count + ' words');
+      setText($('#std-hint'), standardLabel());
+      $('#chip12').classList.toggle('is-on', state.count === 12);
+      $('#chip20').classList.toggle('is-on', state.count === 20);
+      $('#chip24').classList.toggle('is-on', state.count === 24);
+      var grid = $('#wordgrid');
+      grid.classList.toggle('cols-4', state.count === 24);
+      syncList(grid, 'tpl-word', state.count, function (el, i) {
+        setText($('.word-n', el), String(i + 1));
+        setVal($('input', el), state.words[i] || '');
+      });
+      setVal($('#input-pass'), state.inputPass);
+      setText($('#pass-help'), isSlip39()
+        ? 'Decrypts this share. A wrong one silently produces a different secret — check the '
+        + 'fingerprint below against what you recorded.'
+        : 'Changes which wallet the phrase opens, and so the fingerprint. It is NOT stored in the '
+        + 'shares — you must remember it separately to restore this wallet.');
+      $('#seed-next').disabled = !state.secret;
+      setText($('#seed-fp'), state.seedFp);
+      show($('#seed-fp-wrap'), !!state.seedFp);
+      show($('#seed-blocked'), !allWordsIn());
+      setText($('#seed-err'), state.seedErr);
+      show($('#seed-err'), !!state.seedErr);
+    }
 
-// A pasted phrase fills the whole grid and picks 12 vs 24 for you.
-document.addEventListener('paste', function (e) {
-  var t = e.target.closest('[data-act="word"]');
-  if (!t) return;
-  var text = (e.clipboardData || window.clipboardData).getData('text') || '';
-  var parts = text.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
-  if (parts.length < 2) return;
-  e.preventDefault();
-  var count = parts.length > 12 ? 24 : 12;
-  var w = fill(count, '');
-  parts.slice(0, count).forEach(function (p, k) { w[k] = p; });
-  t.blur();
-  setState({ count: count, words: w });
-});
+    function renderSplit() {
+      setText($('#n-val'), String(state.n));
+      setText($('#m-val'), String(state.m));
+      setVal($('#n-range'), String(state.n));
+      $('#m-range').max = String(state.n);
+      setVal($('#m-range'), String(state.m));
+      syncList($('#viz'), 'tpl-viz', state.n, function (el, i) {
+        el.classList.toggle('is-needed', i < state.m);
+        setText($('span', el), '#' + (i + 1));
+      });
+      var sentence;
+      if (state.n === 1) {
+        sentence = 'One key holding one share. No splitting — this is a single copy of your seed, and '
+          + 'losing that key loses it.';
+      } else if (state.m === 1) {
+        sentence = 'Any single key rebuilds your seed on its own — convenient, but one stolen key and '
+          + 'its PIN is a stolen wallet.';
+      } else {
+        sentence = 'Any ' + state.m + ' of the ' + state.n + ' keys rebuild your seed. Any '
+          + (state.m - 1) + ' reveal nothing at all.';
+      }
+      setText($('#split-sentence'), sentence);
+      setText($('#split-note'), 'You will need ' + state.n + ' YubiKeys, one per share, each on '
+        + 'firmware 5.5 or newer. A key cannot be cloned, so losing more than '
+        + (state.n - state.m) + ' of them loses the backup. Have them all to hand before you start.');
+      setText($('#split-next'), state.busy ? 'Splitting…' : 'Split into ' + state.n + ' shares');
+      $('#split-next').disabled = state.busy;
+    }
 
-render();
-</script>
+    function renderWrite() {
+      setText($('#pin-note'), 'Chrome will ask you to set a PIN if the key has none, and 0000 is '
+        + 'accepted. The PIN is the only thing protecting a share on a key you lose, so a known '
+        + 'default means anyone holding ' + state.m + ' of these keys has your seed. Whichever you '
+        + 'pick, write it down: eight wrong attempts wipes a key, and a PIN forgotten across every '
+        + 'key cannot be recovered.');
+      syncList($('#enc-rows'), 'tpl-enc-row', state.n, function (el, i) {
+        var done = state.written[i];
+        var active = !done && i === state.written.length;
+        el.classList.toggle('is-active', active);
+        el.classList.toggle('is-done', !!done);
+        setText($('.row-dot', el), done ? '✓' : String(i + 1));
+        setText($('.row-title', el), 'Share ' + (i + 1) + ' of ' + state.n);
+        setText($('.row-sub', el), done ? done.label
+          : active ? 'Plug in the key for this share' : 'Waiting');
+        var status = $('.status', el);
+        setText(status, done ? 'On the key' : active ? 'Your turn' : 'Not started');
+        status.className = 'status ' + (done ? 'ok' : active ? 'active' : 'idle');
+        show($('.row-body', el), active);
+        show($('.row-done', el), !!done);
+        if (active) {
+          setVal($('.f-label', el), state.keyLabel);
+          $('.f-write', el).disabled = state.busy;
+          show($('.spinner', el), state.busy);
+          setText($('.f-write-text', el), state.busy ? 'Follow the prompts…' : 'Write to this YubiKey');
+          setText($('.f-hint', el), state.busy ? 'PIN and touch, twice'
+            : 'Share ' + (i + 1) + ' of ' + state.n);
+          setText($('.f-err', el), state.writeErr);
+        }
+        if (done) {
+          setText($('.f-stored', el), state.revealed === i ? state.shares[i]
+            : 'Stored on the key. The words are hidden — the key is meant to be the only copy.');
+          setText($('.f-reveal', el), state.revealed === i ? 'Hide words' : 'Show words');
+        }
+      });
+      show($('#to-verify-wrap'), state.written.length === state.n);
+    }
+
+    function renderVerify() {
+      setText($('#verify-sub'), 'Unplug each key, plug it back in, and read the share off it. This '
+        + 'proves the write worked while you can still redo it — there is no paper copy to fall back '
+        + 'on. ' + state.m + ' of the ' + state.n + ' keys are needed.');
+      syncList($('#verify-rows'), 'tpl-read-row', state.vRecords.length, function (el, i) {
+        var r = state.vRecords[i];
+        setText($('.row-title', el), 'Share ' + (r.i + 1) + ' of ' + r.n);
+        setText($('.row-sub', el), r.label);
+      });
+      var left = state.m - state.vRecords.length;
+      setText($('#verify-btn-text'), state.busy ? 'Follow the prompts…'
+        : 'Read a YubiKey' + (left > 0 ? ' (' + left + ' to go)' : ''));
+      show($('#verify-spin'), state.busy);
+      $('#verify-btn').disabled = state.busy;
+      var msg = $('#verify-msg');
+      setText(msg, state.verifyMsg);
+      msg.className = 'result ' + (state.verifyOk ? 'ok' : 'err');
+    }
+
+    function renderDone() {
+      setText($('#done-badge'), 'Verified — ' + state.m + ' keys rebuilt your seed');
+      setText($('#done-fp'), state.seedFp);
+      setText($('#recovery-note'), 'To restore: open this tool at ' + rpId() + ', choose Restore, and '
+        + 'read any ' + state.m + ' of the ' + state.n + ' keys. Shares are bound to that address and '
+        + 'cannot be read anywhere else. If this tool is ever gone, python-fido2 can read the blob off '
+        + 'a key given its PIN. Record the address, the ' + state.m + '-of-' + state.n + ' threshold, '
+        + 'the fingerprint above, and your PIN.');
+      syncList($('#done-grid'), 'tpl-done-card', state.written.length, function (el, i) {
+        setText($('.done-num', el), '#' + (i + 1));
+        setText($('.done-label', el), state.written[i].label);
+        setText($('.done-blob', el), 'Share ' + (i + 1) + ' of ' + state.n + ' — on the key.');
+      });
+    }
+
+    function renderCollect() {
+      syncList($('#collect-rows'), 'tpl-read-row', state.rRecords.length, function (el, i) {
+        var r = state.rRecords[i];
+        setText($('.row-title', el), 'Share ' + (r.i + 1) + ' of ' + r.n);
+        setText($('.row-sub', el), r.label);
+      });
+      var need = state.rRecords.length ? state.rRecords[0].m : null;
+      var left = need === null ? null : need - state.rRecords.length;
+      setText($('#read-btn-text'), state.busy ? 'Follow the prompts…'
+        : 'Read a YubiKey' + (left > 0 ? ' (' + left + ' to go)' : ''));
+      show($('#read-spin'), state.busy);
+      $('#read-btn').disabled = state.busy;
+      setText($('#collect-hint'), need === null
+        ? 'The threshold is stored with the first share you read.'
+        : 'This backup needs ' + need + ' of ' + state.rRecords[0].n + ' keys.');
+      setText($('#read-err'), state.readErr);
+      show($('#read-err'), !!state.readErr);
+
+      show($('#paste-wrap'), state.pasteMode);
+      if (state.pasteMode) {
+        syncList($('#paste-rows'), 'tpl-paste-row', state.pasted.length, function (el, i) {
+          var t = (state.pasted[i] || '').trim();
+          var n = t ? t.split(/\s+/).length : 0;
+          var ok = n === 20 || n === 33;
+          el.classList.toggle('is-bad', !!t && !ok);
+          setText($('.crow-head span:first-child', el), 'Share ' + (i + 1));
+          var hint = $('.hint', el);
+          setText(hint, !t ? '' : ok ? n + ' words' : n + ' words — expected 20 or 33');
+          hint.className = 'hint ' + (ok ? 'ok' : 'err');
+          setVal($('textarea', el), state.pasted[i] || '');
+        });
+      }
+    }
+
+    function renderRestored() {
+      var words = state.rSeed ? state.rSeed.split(' ') : [];
+      setText($('#restored-kind'), state.rKind);
+      setText($('#restored-fp'), state.rFp);
+      var grid = $('#words-out');
+      grid.classList.toggle('cols-4', words.length > 12);
+      grid.classList.toggle('is-hidden', !state.reveal);
+      syncList(grid, 'tpl-word-out', words.length, function (el, i) {
+        setText($('.word-n', el), String(i + 1));
+        setText($('.value', el), words[i]);
+      });
+      setText($('#reveal-btn'), state.reveal ? 'Hide phrase' : 'Reveal phrase');
+      setText($('#copy-seed-btn'), state.seedCopied ? 'Copied' : 'Copy phrase');
+      setText($('#restored-alt'), state.rAlt);
+      show($('#restored-alt'), !!state.rAlt);
+    }
+
+    function renderEnv() {
+      var el = $('#env-banner');
+      el.innerHTML = state.env.html;
+      el.classList.toggle('is-blocked', !state.env.ok);
+      show(el, true);
+      // The "download and run it locally" prompt is noise once you already are.
+      show($('#dl-banner'), location.hostname !== 'localhost');
+    }
+
+    function render() {
+      document.documentElement.toggleAttribute('data-dark', state.dark);
+      setText($('#theme-btn'), state.dark ? 'Light' : 'Dark');
+      renderEnv();
+      showPanels();
+      if (state.view === 'home') return;
+      renderStepper();
+      if (state.view === 'backup') {
+        if (state.step === 0) renderSeed();
+        if (state.step === 1) renderSplit();
+        if (state.step === 2) renderWrite();
+        if (state.step === 3) renderVerify();
+        if (state.step === 4) renderDone();
+      } else {
+        if (state.step === 0) renderCollect();
+        if (state.step === 1) renderRestored();
+      }
+    }
+
+    /* ============================================================
+       Actions
+       ============================================================ */
+
+    var DEMO = {
+      12: 'legal winner thank year wave sausage worth useful legal winner thank yellow',
+      24: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon '
+        + 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon '
+        + 'abandon art',
+      20: 'duckling enlarge academic academic agency result length solution fridge kidney coal piece '
+        + 'deal husband erode duke ajar critical decision keyboard'
+    };
+
+    function setCount(n) {
+      setState({ count: n, words: fill(n, ''), secret: null, seedFp: '', seedErr: '' });
+    }
+
+    function doSplit() {
+      if (state.busy || !state.secret) return;
+      setState({ busy: true, writeErr: '' });
+      // Always an empty SLIP-39 passphrase: that is what keeps the shares
+      // restorable on a Trezor, which never asks for one.
+      generateShares(state.secret, state.m, state.n, '').then(function (shares) {
+        setState({ shares: shares, written: [], busy: false, step: 2, keyLabel: '', revealed: -1 });
+      }).catch(function (e) {
+        setState({ busy: false, seedErr: e.message });
+      });
+    }
+
+    function doWrite() {
+      if (state.busy) return;
+      var i = state.written.length;
+      if (i >= state.n) return;
+      var label = state.keyLabel.trim() || 'YubiKey ' + (i + 1);
+      setState({ busy: true, writeErr: '' });
+      writeShareToKey({
+        v: RECORD_VERSION, share: state.shares[i], of: originKind(), rp: rpId(),
+        n: state.n, m: state.m, i: i, label: label, fp: state.seedFp,
+        created: new Date().toISOString().slice(0, 10)
+      }).then(function () {
+        setState({ written: state.written.concat([{ label: label }]), busy: false, keyLabel: '' });
+      }).catch(function (e) {
+        setState({ busy: false, writeErr: e.message });
+      });
+    }
+
+    function doVerifyRead() {
+      if (state.busy) return;
+      setState({ busy: true, verifyMsg: '', verifyOk: null });
+      readShareFromKey().then(function (rec) {
+        if (state.vRecords.some(function (r) { return r.i === rec.i; })) {
+          throw new Error('That key has already been read — try a different one.');
+        }
+        var recs = state.vRecords.concat([rec]);
+        if (recs.length < state.m) {
+          setState({ vRecords: recs, busy: false });
+          return null;
+        }
+        return combineMnemonics(recs.map(function (r) { return r.share; }), '').then(function (secret) {
+          if (bytesToHex(secret) !== bytesToHex(state.secret)) {
+            throw new Error('Those keys rebuild a different secret. Do not rely on this backup.');
+          }
+          setState({
+            vRecords: recs, busy: false, verifyOk: true, step: 4,
+            verifyMsg: 'Verified — moving on'
+          });
+        });
+      }).catch(function (e) {
+        setState({ busy: false, verifyOk: false, verifyMsg: e.message });
+      });
+    }
+
+    /* Turn a recovered master secret back into something a wallet accepts. The
+       share record says which standard it came from; a pasted share does not, so
+       both encodings are offered. */
+    function presentSecret(secret, of, recordedFp) {
+      if (of === 'bip39-128' || of === 'bip39-256') {
+        return bip39FromEntropy(secret).then(function (phrase) {
+          return {
+            text: phrase, kind: 'BIP-39 · ' + phrase.split(' ').length + ' words',
+            fp: recordedFp, alt: ''
+          };
+        });
+      }
+      return generateShares(secret, 1, 1, '').then(function (one) {
+        var out = {
+          text: one[0], kind: 'SLIP-39 · ' + one[0].split(' ').length + ' words',
+          fp: recordedFp, alt: ''
+        };
+        if (of) return out;
+        // Pasted shares carry no origin marker, so say what the other reading is.
+        return bip39FromEntropy(secret).then(function (phrase) {
+          out.kind = 'SLIP-39 · ' + one[0].split(' ').length + ' words (origin not recorded)';
+          out.alt = 'If this backup was made from a BIP-39 phrase, the same bytes are: ' + phrase;
+          return out;
+        }, function () { return out; });
+      });
+    }
+
+    function finishRestore(mnemonics, of, recordedFp) {
+      return combineMnemonics(mnemonics, '').then(function (secret) {
+        return presentSecret(secret, of, recordedFp);
+      }).then(function (r) {
+        // When no fingerprint was recorded, derive one so there is still something
+        // to compare against.
+        if (r.fp) return r;
+        return combineMnemonics(mnemonics, '').then(function (secret) {
+          return bip32Fingerprint(secret).then(function (f) { r.fp = f; return r; });
+        });
+      }).then(function (r) {
+        setState({
+          rSeed: r.text, rKind: r.kind, rFp: r.fp, rAlt: r.alt,
+          busy: false, step: 1, reveal: false, readErr: ''
+        });
+      });
+    }
+
+    function doRestoreRead() {
+      if (state.busy) return;
+      setState({ busy: true, readErr: '' });
+      readShareFromKey().then(function (rec) {
+        if (state.rRecords.some(function (r) { return r.i === rec.i; })) {
+          throw new Error('That key has already been read — try a different one.');
+        }
+        var recs = state.rRecords.concat([rec]);
+        if (recs.length < recs[0].m) {
+          setState({ rRecords: recs, busy: false });
+          return null;
+        }
+        setState({ rRecords: recs });
+        return finishRestore(recs.map(function (r) { return r.share; }), recs[0].of, recs[0].fp);
+      }).catch(function (e) {
+        setState({ busy: false, readErr: e.message });
+      });
+    }
+
+    function doPasteCombine() {
+      var list = state.pasted.map(function (t) { return (t || '').trim(); }).filter(Boolean);
+      if (!list.length) return;
+      setState({ busy: true, readErr: '' });
+      finishRestore(list, null, '').catch(function (e) {
+        setState({ busy: false, readErr: e.message });
+      });
+    }
+
+    function wipe() {
+      setState({
+        view: 'home', step: 0, count: 12, words: fill(12, ''), inputPass: '',
+        secret: null, seedFp: '', seedErr: '', n: 5, m: 3, shares: [],
+        written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1,
+        vRecords: [], verifyMsg: '', verifyOk: null,
+        rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
+        rSeed: '', rFp: '', rKind: '', rAlt: '', reveal: false, seedCopied: false
+      });
+    }
+
+    var CLICKS = {
+      home: function () { setState({ view: 'home' }); },
+      theme: function () { setState({ dark: !state.dark }); },
+      backup: function () { setState({ view: 'backup', step: 0 }); },
+      restore: function () { setState({ view: 'restore', step: 0 }); },
+      back: function () { setState({ step: Math.max(0, state.step - 1) }); },
+      count12: function () { setCount(12); },
+      count20: function () { setCount(20); },
+      count24: function () { setCount(24); },
+      demo: function () { setState({ words: DEMO[state.count].split(' ') }); refreshSeed(); },
+      'seed-next': function () { if (state.secret) setState({ step: 1 }); },
+      'split-next': doSplit,
+      'write-key': doWrite,
+      'reveal-share': function (i) { setState({ revealed: state.revealed === i ? -1 : i }); },
+      'to-verify': function () {
+        setState({ step: 3, vRecords: [], verifyMsg: '', verifyOk: null });
+      },
+      'verify-read': doVerifyRead,
+      'read-key': doRestoreRead,
+      'toggle-paste': function () { setState({ pasteMode: !state.pasteMode }); },
+      'paste-more': function () { setState({ pasted: state.pasted.concat(['']) }); },
+      'paste-combine': doPasteCombine,
+      wipe: wipe,
+      reveal: function () { setState({ reveal: !state.reveal }); },
+      'copy-seed': function () {
+        copyText(state.rSeed).then(function (ok) {
+          setState({ seedCopied: ok });
+          setTimeout(function () { setState({ seedCopied: false }); }, 1400);
+        });
+      }
+    };
+
+    var INPUTS = {
+      word: function (i, v) {
+        var w = state.words.slice();
+        w[i] = v;
+        setState({ words: w });
+        refreshSeed();
+      },
+      inputpass: function (i, v) { setState({ inputPass: v }); refreshSeed(); },
+      n: function (i, v) {
+        var n = +v;
+        setState({ n: n, m: Math.min(state.m, n) });
+      },
+      m: function (i, v) { setState({ m: Math.min(+v, state.n) }); },
+      keylabel: function (i, v) { setState({ keyLabel: v }); },
+      pasteshare: function (i, v) {
+        var p = state.pasted.slice();
+        p[i] = v;
+        setState({ pasted: p, readErr: '' });
+      }
+    };
+
+    /* ============================================================
+       Wiring
+       ============================================================ */
+
+    function indexOf(el) {
+      var row = el.closest('[data-i]');
+      return row ? +row.dataset.i : -1;
+    }
+
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-act]');
+      if (!t || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
+      var fn = CLICKS[t.dataset.act];
+      if (!fn) return;
+      if (t.tagName === 'A') e.preventDefault();
+      fn(indexOf(t));
+    });
+
+    document.addEventListener('input', function (e) {
+      var t = e.target.closest('[data-act]');
+      if (!t) return;
+      var fn = INPUTS[t.dataset.act];
+      if (fn) fn(indexOf(t), t.value);
+    });
+
+    // A pasted phrase fills the whole grid and picks the word count for you.
+    document.addEventListener('paste', function (e) {
+      var t = e.target.closest('[data-act="word"]');
+      if (!t) return;
+      var text = (e.clipboardData || window.clipboardData).getData('text') || '';
+      var parts = text.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+      if (parts.length < 2) return;
+      e.preventDefault();
+      // Only the three supported lengths; anything else keeps the current grid so
+      // the user sees their words rather than a silently truncated phrase.
+      var count = parts.length === 12 || parts.length === 20 || parts.length === 24
+        ? parts.length : state.count;
+      var w = fill(count, '');
+      parts.slice(0, count).forEach(function (p, k) { w[k] = p; });
+      t.blur();
+      setState({ count: count, words: w });
+      refreshSeed();
+    });
+
+    render();
+  </script>
 
 </body>
+
 </html>
