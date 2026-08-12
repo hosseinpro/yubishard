@@ -2556,7 +2556,11 @@
           rp: { id: rpId(), name: 'YubiShard' },
           user: {
             id: crypto.getRandomValues(new Uint8Array(16)),
-            name: 'YubiShard share-' + (record.i + 1) + '-of-' + record.n,
+            // This is what Chrome's picker and `ykman fido credentials list`
+            // show, so it carries the user's own label for the key — a bare
+            // share number is no help when you are holding five of them.
+            name: 'YubiShard: ' + record.label
+              + ' (share-' + (record.i + 1) + '-of-' + record.n + ')',
             displayName: record.label
           },
           pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
