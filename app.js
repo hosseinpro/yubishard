@@ -1558,11 +1558,13 @@ function renderWrite() {
       show($('.spinner', el), state.busy);
       setText($('.f-write-text', el), state.busy ? 'Follow the prompts…'
         : resuming ? 'Try storing the share again'
-          : checked ? 'Write the share to this key' : 'Check this key is free');
+          : checked ? 'Write the share to this key' : 'Check this key');
       setText($('.f-hint', el), state.busy ? 'PIN and touch'
         : resuming ? 'The key is already set up — this retries just the share'
           : checked ? 'Key is free. Leave it plugged in — this press stores the share.'
-            : 'Step 1 of 2 · confirms the key holds no other share');
+            // Deliberately not "checks the key can store a blob" — that is only
+            // knowable from create(), on the next press.
+            : 'Step 1 of 2 · confirms the key answers and holds no share yet');
       setText($('.f-err', el), state.writeErr);
     }
     if (done) {
