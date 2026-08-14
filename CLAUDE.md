@@ -31,13 +31,14 @@ serve.bat                # Windows
 python3 -m http.server 8000 --bind localhost    # by hand
 ```
 
-**Bump `?v=` in `index.html` whenever you edit `app.js` or `styles.css`.** Both are referenced as
-`app.js?v=1` and `styles.css?v=1`. Without that, Chrome serves the cached copy through ordinary
-refreshes — which once cost several rounds of debugging a bug that had already been fixed, against
-JavaScript the browser was quietly reusing. The symptom is deceptive: the fix looks like it did not
-work, rather than like it did not load. When in doubt, check that a string you just changed is
-actually present in `document.querySelector('script[src^="app.js"]')`'s fetched source, or hard-reload
-with Cmd/Ctrl+Shift+R.
+**Confirm which build you are testing before concluding anything.** `http.server` sends
+`Last-Modified`, so an edited `app.js` revalidates and a plain refresh picks it up — but automated
+browser tooling in particular will happily hold an in-memory copy across a navigation. Mistaking a
+stale script for a failed fix once cost several rounds: a correct diagnosis was abandoned and
+replaced with a wrong one, because "the fix did not work" and "the fix did not load" look identical
+from outside. Before deciding a change had no effect, check that a string you just wrote is present
+in the running code — `/some new string/.test(someFunction.toString())` — or hard-reload with
+Cmd/Ctrl+Shift+R.
 
 Then open `http://localhost:8000/`. Use the hostname `localhost`, never `127.0.0.1` — a bare IP is
 never a valid RP ID. The port is not part of the RP ID, so it can change freely.
