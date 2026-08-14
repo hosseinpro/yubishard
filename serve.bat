@@ -5,7 +5,6 @@ REM YubiShard needs a real origin: WebAuthn derives its relying-party ID from
 REM the page's hostname, and a file:// URL has none, so credentials cannot be
 REM created or read from a double-clicked file. localhost is the exception.
 cd /d "%~dp0"
-set PORT=8000
 
 REM Probe by running it: Windows 11 ships a WindowsApps stub that satisfies
 REM "where python" but only prints a Microsoft Store message when invoked.
@@ -15,6 +14,8 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+
+set PORT=8000
 
 start "" chrome "http://localhost:%PORT%/"
 echo Serving %CD% at http://localhost:%PORT%/   (Ctrl+C to stop)

@@ -1,5 +1,8 @@
 claude
 
-write fingerprint in the largeBlob and check it in recover.
-
-split index.html to a css, a html, and a js file.
+what is in the blob. it should be:
+domain
+label
+n-of-m
+share
+fingerprint

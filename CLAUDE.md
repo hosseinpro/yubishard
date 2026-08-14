@@ -5,9 +5,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 YubiShard splits a wallet recovery phrase into SLIP-39 shares and stores each share on a separate
-YubiKey using the WebAuthn largeBlob extension. `index.html` is the entire product: one hand-written
-file, no dependencies, no framework, no build step. `serve.command` and `serve.bat` only exist to
-put that file behind an origin.
+YubiKey using the WebAuthn largeBlob extension.
+
+Three hand-written files, no dependencies, no framework, no build step:
+
+| | |
+|---|---|
+| `index.html` | markup for every screen, plus the `<template>` rows |
+| `styles.css` | all styling |
+| `app.js` | wordlists, crypto, WebAuthn, state, render, actions, wiring — in that order |
+
+`serve.command` and `serve.bat` only exist to put them behind an origin. They are plain `<link>` and
+`<script src>` references — nothing bundles or transforms them, so what ships is what you edit.
 
 ## Running it
 
@@ -21,6 +30,14 @@ the page's hostname, and a `file://` URL has none, so `navigator.credentials.cre
 serve.bat                # Windows
 python3 -m http.server 8000 --bind localhost    # by hand
 ```
+
+**Bump `?v=` in `index.html` whenever you edit `app.js` or `styles.css`.** Both are referenced as
+`app.js?v=1` and `styles.css?v=1`. Without that, Chrome serves the cached copy through ordinary
+refreshes — which once cost several rounds of debugging a bug that had already been fixed, against
+JavaScript the browser was quietly reusing. The symptom is deceptive: the fix looks like it did not
+work, rather than like it did not load. When in doubt, check that a string you just changed is
+actually present in `document.querySelector('script[src^="app.js"]')`'s fetched source, or hard-reload
+with Cmd/Ctrl+Shift+R.
 
 Then open `http://localhost:8000/`. Use the hostname `localhost`, never `127.0.0.1` — a bare IP is
 never a valid RP ID. The port is not part of the RP ID, so it can change freely.
@@ -51,9 +68,10 @@ a Trezor, cannot be automated here.
 
 ## Structure
 
-Four sections in one file: inline `<style>`, static markup for every screen, `<template>` elements
-for repeated rows, one inline `<script>`. The script is ordered: wordlists, crypto primitives,
-SLIP-39, BIP-39, WebAuthn, state, render, actions, wiring.
+`app.js` is ordered: wordlists, crypto primitives, SLIP-39, BIP-39, WebAuthn, state, DOM helpers,
+render, actions, wiring. It is loaded at the end of `<body>`, so the DOM and the `<template>`
+elements it reads exist by the time it runs — there is no `DOMContentLoaded` guard and none is
+needed.
 
 Every screen exists in the DOM at all times and is toggled with `hidden`. Navigation is two-axis —
 `state.view` (`'home' | 'backup' | 'restore'`) and `state.step` — resolved in `showPanels()`.
@@ -144,8 +162,30 @@ the fingerprint.
   `largeBlob: { support: 'required' }`; the blob is then written by a follow-up `get()` with
   `largeBlob: { write: bytes }`, because WebAuthn only writes during an assertion. That is why the
   key asks for PIN and touch twice.
-- **Always check `getClientExtensionResults().largeBlob.supported`** after create, and `.written`
-  after the write. A key without largeBlob otherwise looks like it worked.
+- **A stale virtual authenticator will send you chasing ghosts.** Chrome's DevTools authenticator
+  accumulates a credential per attempt, and once it holds several for one origin the read-back
+  returns the wrong one — which looks exactly like a failed write, and led to a two-press UI and a
+  `written: false` theory that were both wrong. Clear all credentials before drawing any conclusion
+  about the write path.
+- **A read and a write cannot share one user press.** A discoverable-credential `get()` leaves
+  Chrome holding a PIN token without the large-blob-write permission, so anything chained behind it
+  in that press gets `written: false` — confirmed on both a cluttered and a clean authenticator. A
+  new press gets a fresh token. Hence the flow: press one is `existingShareOnKey()`, press two is
+  `create()` + `writeBlob()`. Those last two must stay together; that pairing is the one known to
+  work. `state.checkedFor` carries the result between presses.
+- **`excludeCredentials` is a backstop, not the check.** It only knows credentials made since the
+  page loaded, and Chrome's DevTools virtual authenticator ignores it outright — which is why
+  duplicate writes appeared to be allowed there even though the code was correct.
+- **Reuse `pendingCred` on retry, never call `create()` again.** Each registration burns a resident
+  slot (25 before firmware 5.7, 100 after), and once a key holds several credentials for one origin
+  Chrome shows an account picker on every read, which breaks the restore flow.
+- **Always check `getClientExtensionResults().largeBlob.supported`** after create. A key without
+  largeBlob otherwise looks like it worked.
+- **`written` is not trustworthy on its own.** Chrome's DevTools virtual authenticator stores the
+  blob and still reports `written: false`. Taking the flag at face value made a working write look
+  broken. So a `written !== true` result is not fatal on its own — `confirmBlob()` reads the blob
+  back off that credential and compares it byte for byte, and only a failed comparison is an error.
+  The extra ceremony only happens on the path that would have failed anyway.
 - **Firmware: quote 5.7+, not 5.5+.** The extension did arrive in 5.5, but 5.5.x and 5.6.x shipped
   only on the Bio Series — the mainline 5 Series (5 NFC, 5C NFC, 5 Nano) went 5.4.3 straight to 5.7,
   which reached retail 2024-05-21. So for the keys anyone actually buys for this, 5.7 is the floor

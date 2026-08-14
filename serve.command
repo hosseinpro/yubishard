@@ -5,7 +5,6 @@
 # page's hostname, and a file:// URL has none, so credentials cannot be created
 # or read from a double-clicked file. localhost is the exception the spec grants.
 cd "$(dirname "$0")" || exit 1
-PORT=8000
 
 command -v python3 >/dev/null 2>&1 || {
   echo "python3 not found. Install Python 3 from python.org, then run this again."
@@ -13,6 +12,8 @@ command -v python3 >/dev/null 2>&1 || {
 }
 [ -d "/Applications/Google Chrome.app" ] || \
   echo "Warning: Chrome not found. The YubiKey step only works in Chrome."
+
+PORT=8000
 
 # Give the server a moment to bind before the browser asks for the page.
 { sleep 1; open -a "Google Chrome" "http://localhost:$PORT/" 2>/dev/null; } &

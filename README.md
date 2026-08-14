@@ -31,6 +31,9 @@ Either one serves this folder at `http://localhost:8000/` and opens Chrome. To d
 python3 -m http.server 8000 --bind localhost
 ```
 
+After updating YubiShard, hard-reload once (**Cmd/Ctrl+Shift+R**) so the browser picks up the new
+`app.js` rather than a cached copy.
+
 **Open `http://localhost`, never `http://127.0.0.1`.** A bare IP address can never identify a site
 to a security key, and the call fails with a `SecurityError`.
 
@@ -187,7 +190,8 @@ or the domain), so record that along with the threshold, the fingerprint and the
 
 ## Development
 
-`index.html` is the entire product — one hand-written file, no dependencies, no build step. See
+Three hand-written files — `index.html`, `styles.css` and `app.js` — with no dependencies and no
+build step. Nothing bundles or transforms them, so what ships is what you edit. See
 `CLAUDE.md` for the internals and how to run the SLIP-39 test vectors.
 
 ## Further reading
