@@ -174,6 +174,14 @@ the fingerprint.
   new press gets a fresh token. Hence the flow: press one is `existingShareOnKey()`, press two is
   `create()` + `writeBlob()`. Those last two must stay together; that pairing is the one known to
   work. `state.checkedFor` carries the result between presses.
+- **A page cannot delete a credential, and cannot open Chrome's settings either.** WebAuthn has no
+  delete; that needs `chrome://settings/securityKeys`. And Chrome blocks web
+  content from navigating to `chrome://` at all — `window.open` returns null, an anchor click and a
+  `location.href` assignment are both silently ignored, all three verified. So the UI can only offer
+  the address to copy. Overwriting the blob instead was tried and rejected: it destroys the share
+  but leaves the credential occupying a resident slot, which is a half-measure.
+- **The credential id comes from the assertion.** `existingShareOnKey()` returns `assertion.rawId`
+  alongside the record. Nothing needs it right now, but it is the only way to obtain one.
 - **`excludeCredentials` is a backstop, not the check.** It only knows credentials made since the
   page loaded, and Chrome's DevTools virtual authenticator ignores it outright — which is why
   duplicate writes appeared to be allowed there even though the code was correct.

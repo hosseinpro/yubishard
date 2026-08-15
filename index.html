@@ -310,7 +310,24 @@
           </button>
           <span class="note f-hint"></span>
         </div>
-        <div class="err-line f-err"></div>
+        <div class="err-line">
+          <span class="f-err"></span>
+          <!-- Chrome blocks pages from navigating to chrome://, so the address
+               is shown to copy rather than linked. Inline, so it reads as the
+               end of the sentence above it. -->
+          <span class="addr-inline f-addr" hidden>
+            <code class="f-addr-url"></code>
+            <button class="icon-btn f-addr-copy" data-act="copy-keys-url" type="button"
+              title="Copy address" aria-label="Copy address">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <rect x="5.5" y="5.5" width="8" height="9" rx="1.5"></rect>
+                <path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h1"></path>
+              </svg>
+            </button>
+            <span class="f-addr-done"></span>
+          </span>
+          <span class="f-err-tail"></span>
+        </div>
       </div>
       <div class="row-done" hidden>
         <div class="blobbox f-stored"></div>

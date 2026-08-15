@@ -915,6 +915,10 @@ function bip39Seed(phrase, passphrase) {
    ============================================================ */
 
 var RECORD_VERSION = 1;
+
+// Chrome refuses to navigate to chrome:// from a web page, so this can only
+// ever be copied for the user to paste — never opened by a link or window.open.
+var KEYS_SETTINGS_URL = 'chrome://settings/securityKeys';
 var BLOB_BUDGET = 900;   // spec guarantees >= 1024 serialized; leave headroom
 
 function rpId() { return location.hostname; }
@@ -1001,7 +1005,11 @@ function existingShareOnKey() {
     if (!ext || !ext.largeBlob || !ext.largeBlob.blob) return null;
     try {
       var rec = JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob)));
-      return (rec && rec.v === RECORD_VERSION && rec.share) ? rec : null;
+      if (!rec || rec.v !== RECORD_VERSION || !rec.share) return null;
+      // The credential id comes back with the assertion, which is the only way
+      // to get it — so erasing or overwriting this share later can target this
+      // exact credential instead of registering another one.
+      return { rec: rec, credId: assertion.rawId };
     } catch (e) { return null; }
   }, function () { return null; });
 }
@@ -1134,16 +1142,20 @@ function confirmBlob(credId, expected) {
     var ext = assertion && assertion.getClientExtensionResults();
     var lb = ext && ext.largeBlob;
     if (!lb) {
-      return { ok: false, why: 'returned no largeBlob result at all — this browser or key may not '
-        + 'support reading blobs back' };
+      return {
+        ok: false, why: 'returned no largeBlob result at all — this browser or key may not '
+          + 'support reading blobs back'
+      };
     }
     if (!lb.blob) {
       return { ok: false, why: 'found the credential but no blob on it' };
     }
     var got = new Uint8Array(lb.blob);
     if (got.length !== expected.length) {
-      return { ok: false, why: 'found a blob of ' + got.length + ' bytes where '
-        + expected.length + ' were written' };
+      return {
+        ok: false, why: 'found a blob of ' + got.length + ' bytes where '
+          + expected.length + ' were written'
+      };
     }
     for (var i = 0; i < got.length; i++) {
       if (got[i] !== expected[i]) {
@@ -1152,8 +1164,10 @@ function confirmBlob(credId, expected) {
     }
     return { ok: true, why: '' };
   }, function (e) {
-    return { ok: false, why: 'failed with ' + (e && e.name ? e.name : 'an unknown error')
-      + (e && e.message ? ' (' + e.message + ')' : '') };
+    return {
+      ok: false, why: 'failed with ' + (e && e.name ? e.name : 'an unknown error')
+        + (e && e.message ? ' (' + e.message + ')' : '')
+    };
   });
 }
 
@@ -1251,6 +1265,9 @@ var state = {
   // its own press because a read and a write cannot share one — see
   // existingShareOnKey().
   checkedFor: -1,
+  // { rec, credId } when the check found a share already on the key, so it can
+  // be erased without a second read.
+  foundOnKey: null, urlCopied: false,
 
   // read-back gate
   vRecords: [], verifyMsg: '', verifyOk: null,
@@ -1551,20 +1568,29 @@ function renderWrite() {
     if (active) {
       // Two presses: check the key is free, then write. They cannot be merged.
       var checked = state.checkedFor === i;
+      var occupied = !!state.foundOnKey;
       setVal($('.f-label', el), state.keyLabel);
       $('.f-label', el).disabled = resuming;
       $('.f-write', el).disabled = state.busy;
       $('.f-write', el).dataset.act = (checked || resuming) ? 'write-key' : 'check-key';
+      show($('.f-addr', el), occupied && !state.busy);
+      setText($('.f-addr-url', el), KEYS_SETTINGS_URL);
+      setText($('.f-addr-done', el), state.urlCopied ? 'Copied' : '');
+      // The credentials live under "Sign-in data" on that page, which is not
+      // obvious — the page opens on PIN and fingerprint options.
+      setText($('.f-err-tail', el), occupied ? 'under Sign-in data.' : '');
       show($('.spinner', el), state.busy);
       setText($('.f-write-text', el), state.busy ? 'Follow the prompts…'
-        : resuming ? 'Try storing the share again'
-          : checked ? 'Write the share to this key' : 'Check this key');
+        : (checked || resuming) ? 'Write the share to this key' : 'Check this key');
       setText($('.f-hint', el), state.busy ? 'PIN and touch'
-        : resuming ? 'The key is already set up — this retries just the share'
-          : checked ? 'Key is free. Leave it plugged in — this press stores the share.'
-            // Deliberately not "checks the key can store a blob" — that is only
-            // knowable from create(), on the next press.
-            : 'Step 1 of 2 · confirms the key answers and holds no share yet');
+        // Nothing here when occupied: the error and the address line below say
+        // it, and a hint above the error explains a problem before stating it.
+        : occupied ? ''
+          : resuming ? 'This key is already set up — this press only stores the share on it'
+            : checked ? 'Key is free. Leave it plugged in — this press stores the share.'
+              // Deliberately not "checks the key can store a blob" — that is only
+              // knowable from create(), on the next press.
+              : 'Step 1 of 2 · confirms the key answers and holds no share yet');
       setText($('.f-err', el), state.writeErr);
     }
     if (done) {
@@ -1709,7 +1735,10 @@ function doSplit() {
   // Always an empty SLIP-39 passphrase: that is what keeps the shares
   // restorable on a Trezor, which never asks for one.
   generateShares(state.secret, state.m, state.n, '').then(function (shares) {
-    setState({ shares: shares, written: [], busy: false, step: 2, keyLabel: '', revealed: -1 });
+    setState({
+      shares: shares, written: [], busy: false, step: 2, keyLabel: '',
+      revealed: -1, checkedFor: -1, foundOnKey: null
+    });
   }).catch(function (e) {
     setState({ busy: false, seedErr: e.message });
   });
@@ -1724,20 +1753,22 @@ function doCheckKey() {
   setState({ busy: true, writeErr: '' });
   existingShareOnKey().then(function (found) {
     if (found) {
+      var r = found.rec;
       setState({
-        busy: false, checkedFor: -1,
-        writeErr: 'This key already holds share ' + (found.i + 1) + ' of ' + found.n
-          + (found.label ? ' ("' + found.label + '")' : '')
-          + '. Use a different key, or clear this one with "ykman fido reset" — two shares on '
-          + 'one key would weaken the threshold.'
+        busy: false, checkedFor: -1, foundOnKey: found,
+        writeErr: 'This key already holds share ' + (r.i + 1) + ' of ' + r.n
+          + (r.label ? ' ("' + r.label + '")' : '')
+          + (r.fp ? ', fingerprint ' + r.fp : '')
+          + '. Use a different key, or free this one by deleting its credential in Chrome at'
       });
       return;
     }
-    setState({ busy: false, checkedFor: i, writeErr: '' });
+    setState({ busy: false, checkedFor: i, writeErr: '', foundOnKey: null });
   }).catch(function (e) {
-    setState({ busy: false, writeErr: friendlyAuthError(e).message });
+    setState({ busy: false, writeErr: friendlyAuthError(e).message, foundOnKey: null });
   });
 }
+
 
 /* Press two: create the credential and write the share. These two stay in the
    same press — that pairing is what works. */
@@ -1755,7 +1786,7 @@ function doWrite() {
   }).then(function () {
     setState({
       written: state.written.concat([{ label: label }]),
-      busy: false, keyLabel: '', checkedFor: -1
+      busy: false, keyLabel: '', checkedFor: -1, foundOnKey: null
     });
   }).catch(function (e) {
     setState({ busy: false, writeErr: e.message });
@@ -1891,6 +1922,7 @@ function wipe() {
     view: 'home', step: 0, count: 12, words: fill(12, ''), inputPass: '',
     secret: null, seedFp: '', verifyFp: '', seedErr: '', n: 5, m: 3, shares: [],
     written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1, checkedFor: -1,
+    foundOnKey: null, urlCopied: false,
     vRecords: [], verifyMsg: '', verifyOk: null,
     rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
     rSeed: '', rFp: '', rKind: '', rAlt: '', reveal: false, seedCopied: false
@@ -1910,6 +1942,12 @@ var CLICKS = {
   'seed-next': function () { if (state.secret) setState({ step: 1 }); },
   'split-next': doSplit,
   'check-key': doCheckKey,
+  'copy-keys-url': function () {
+    copyText(KEYS_SETTINGS_URL).then(function (ok) {
+      setState({ urlCopied: ok });
+      setTimeout(function () { setState({ urlCopied: false }); }, 1600);
+    });
+  },
   'write-key': doWrite,
   'reveal-share': function (i) { setState({ revealed: state.revealed === i ? -1 : i }); },
   'to-verify': function () {
