@@ -477,7 +477,10 @@ textarea:focus-visible {
 .shard-blob {
   font: 10.5px/1.4 var(--mono);
   color: var(--dim);
-  word-break: break-all;
+  /* Wrap between words, never inside one — a mnemonic split mid-word reads as
+     corruption. */
+  word-break: normal;
+  overflow-wrap: break-word;
   text-align: center;
 }
 
