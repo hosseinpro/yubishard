@@ -46,7 +46,8 @@ before enrolling keys there.
    single-share backup is).
 2. Choose a threshold — 3 of 5, say.
 3. Write each share onto its own YubiKey. Chrome asks for the key's PIN and a touch twice: once to
-   create the credential, once to store the share.
+   create the credential, once to store the share. A brand-new key has no PIN, so Chrome will ask
+   you to set one — after that, unplug and reinsert the key before writing.
 4. Verify by unplugging each key, plugging it back in, and reading the share off it. The flow will
    not finish until enough keys round-trip.
 
@@ -77,6 +78,16 @@ keys is possession of the wallet.
 
 **A YubiKey cannot be cloned.** Every key is enrolled independently, so your only redundancy is
 enrolling more keys than the threshold.
+
+**Nothing stops you writing two shares to the same key.** YubiShard refuses a key it has already
+written to during the current session, but it cannot tell whether a key was used in an earlier one —
+checking requires a query that leaves the key unresponsive until it is unplugged and reinserted, so
+it is not done. Use a fresh key for each share and keep track yourself. `ykman fido credentials
+list` shows what a key already holds.
+
+Two shares on one key quietly weakens the scheme: a 3-of-5 where one key carries two shares is
+really a 2-of-4, because that key counts twice. A key holding two shares also makes Chrome show a
+credential picker every time it is read.
 
 **Credentials are bound to the address you enrolled at.** A key enrolled at `localhost` cannot be
 read at `yubishard.com`, or the other way round, and the tool cannot tell a wrong-origin key from a
@@ -181,6 +192,51 @@ What emulation does not cover:
   emulated authenticator will not push back on an oversized one.
 - Reseating the key. The verification step asks for a physical unplug and replug; emulated, you are
   only re-reading.
+
+## What is stored on each key
+
+One JSON record per key, written to its FIDO2 large blob. The field names are deliberately verbose
+and self-describing, because this is what someone reads years from now with `python-fido2` and no
+access to this code:
+
+```json
+{
+  "version": 1,
+  "format": "bip39-128",
+  "domain": "localhost",
+  "quorum-share": "kitchen dream academic acid buyer fiscal mixed national fiscal benefit scatter fortune listen punish transfer romantic agree security timber sweater",
+  "quorum-size": 3,
+  "quorum-threshold": 2,
+  "quorum-index": 0,
+  "quorum-label": "Home safe",
+  "bip32-fingerprint": "B8688DF1",
+  "passphrase-protected": false,
+  "created": "2026-08-21"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `version` | Format version of this record. |
+| `format` | `bip39-128`, `bip39-256` or `slip39-128` — where the secret came from. Without this a restore cannot know whether to re-encode the bytes as BIP-39 words or leave them as SLIP-39, and the bytes alone do not say. |
+| `domain` | The relying-party ID the credential is bound to. A key enrolled at one address cannot be read at another. |
+| `quorum-share` | This key's SLIP-39 mnemonic — 20 words for a 128-bit secret, 33 for 256-bit. Any SLIP-39 tool accepts it. |
+| `quorum-size` | Total keys in the backup. |
+| `quorum-threshold` | How many are needed to restore. |
+| `quorum-index` | Which share this is, counting from zero. |
+| `quorum-label` | The name you gave this key. |
+| `bip32-fingerprint` | The wallet these words open on their own. |
+| `passphrase-protected` | `true` if you said the wallet needs a passphrase. |
+| `created` | ISO date. Informational only. |
+
+About 380 bytes for a 128-bit backup and 490 for 256-bit, against a budget of roughly 960.
+
+**The passphrase itself is never asked for, never used in any derivation, and never stored — only
+the flag is.** That is what keeps it a second factor: someone holding enough keys still cannot open
+a passphrase-protected wallet. It also means `bip32-fingerprint` is always derived with an *empty*
+passphrase, so a restore can always recompute and check it — which is why there is only one
+fingerprint field. The corollary: if you use a passphrase, the fingerprint stored here will **not**
+match what your wallet shows.
 
 ## If this tool disappears
 

@@ -916,6 +916,36 @@ function bip39Seed(phrase, passphrase) {
 
 var RECORD_VERSION = 1;
 
+/* The blob's wire format — documented in README.md under "What is stored on
+   each key". These two functions are the only place the verbose field names
+   appear; the rest of the app uses short ones. Keep it that way. */
+function toBlobRecord(o) {
+  var rec = {
+    'version': RECORD_VERSION,
+    'format': o.of,
+    'domain': o.rp,
+    'quorum-share': o.share,
+    'quorum-size': o.n,
+    'quorum-threshold': o.m,
+    'quorum-index': o.i,
+    'quorum-label': o.label,
+    'bip32-fingerprint': o.fp,
+    'passphrase-protected': !!o.hasPass,
+    'created': o.created
+  };
+  return rec;
+}
+
+function fromBlobRecord(j) {
+  if (!j || j.version !== RECORD_VERSION || !j['quorum-share']) return null;
+  return {
+    share: j['quorum-share'], of: j.format, rp: j.domain,
+    n: j['quorum-size'], m: j['quorum-threshold'], i: j['quorum-index'],
+    label: j['quorum-label'], fp: j['bip32-fingerprint'],
+    hasPass: !!j['passphrase-protected'], created: j.created
+  };
+}
+
 // Chrome refuses to navigate to chrome:// from a web page, so this can only
 // ever be copied for the user to paste — never opened by a link or window.open.
 var KEYS_SETTINGS_URL = 'chrome://settings/securityKeys';
@@ -953,7 +983,8 @@ var pendingCred = null;    // { i: shareIndex, id: rawId }
 function friendlyAuthError(e) {
   if (!e) return new Error('The key did not respond.');
   if (e.name === 'InvalidStateError') {
-    return new Error('This key already holds a share from this backup. Use a different one.');
+    return new Error('This key already holds a share from this backup. Use a different key, or '
+      + 'free this one by deleting its credential in Chrome at');
   }
   if (e.name === 'NotAllowedError') {
     return new Error('Cancelled, or the key was not touched in time. Try again.');
@@ -969,56 +1000,12 @@ function friendlyAuthError(e) {
   return e;
 }
 
-/* Does this key already hold a share from this backup?
-
-   `excludeCredentials` only knows about credentials made since the page loaded,
-   so it cannot see a key that was written to in an earlier session. This asks
-   the key directly, by trying to read a share off it.
-
-   Deliberately tolerant: WebAuthn cannot distinguish "no credential here" from
-   "user cancelled", so only a positive find blocks the write. Anything else —
-   rejection, timeout, unreadable blob — falls through and lets the write
-   proceed, because a false refusal is worse than a missed duplicate.
-
-   THIS MUST BE ITS OWN USER PRESS. Chaining `create()` and the blob write
-   behind it inside one press makes the write return `written: false` every
-   time — the rejected read appears to leave Chrome holding a PIN token without
-   the large-blob-write permission, and everything after it in that press
-   inherits it. A new press gets a fresh token. Confirmed on both a cluttered
-   and a clean authenticator.
-
-   So the flow is: press one checks, press two creates and writes. Those two
-   must stay together, since `create` → `write` in a single press is the
-   sequence known to work. */
-function existingShareOnKey() {
-  return navigator.credentials.get({
-    publicKey: {
-      challenge: challenge(),
-      rpId: rpId(),
-      allowCredentials: [],
-      userVerification: 'required',
-      timeout: 60000,
-      extensions: { largeBlob: { read: true } }
-    }
-  }).then(function (assertion) {
-    var ext = assertion && assertion.getClientExtensionResults();
-    if (!ext || !ext.largeBlob || !ext.largeBlob.blob) return null;
-    try {
-      var rec = JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob)));
-      if (!rec || rec.v !== RECORD_VERSION || !rec.share) return null;
-      // The credential id comes back with the assertion, which is the only way
-      // to get it — so erasing or overwriting this share later can target this
-      // exact credential instead of registering another one.
-      return { rec: rec, credId: assertion.rawId };
-    } catch (e) { return null; }
-  }, function () { return null; });
-}
 
 /* One press per key: check the key is free, create the credential, then write
    the blob. WebAuthn only writes a large blob during an assertion, never at
    registration, so the write is always its own ceremony. */
 function writeShareToKey(record) {
-  var bytes = utf8.encode(JSON.stringify(record));
+  var bytes = utf8.encode(JSON.stringify(toBlobRecord(record)));
   if (bytes.length > BLOB_BUDGET) {
     return Promise.reject(new Error('That label is too long to fit alongside the share.'));
   }
@@ -1035,7 +1022,6 @@ function writeShareToKey(record) {
       throw friendlyAuthError(e);
     });
   }
-  // No read here — the check ran in its own press. See existingShareOnKey().
   return Promise.resolve().then(function () {
     return navigator.credentials.create({
       publicKey: {
@@ -1190,9 +1176,11 @@ function readShareFromKey() {
         + 'the other address, open that one instead.');
     }
     var rec;
-    try { rec = JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob))); }
-    catch (e) { rec = null; }
-    if (!rec || rec.v !== RECORD_VERSION || !rec.share) {
+    try {
+      rec = fromBlobRecord(
+        JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob))));
+    } catch (e) { rec = null; }
+    if (!rec) {
       throw new Error('What is stored on this key is not a YubiShard share.');
     }
     return rec;
@@ -1254,27 +1242,25 @@ var state = {
 
   // phrase entry
   count: 12, words: fill(12, ''), inputPass: '',
-  secret: null, seedFp: '', verifyFp: '', seedErr: '',
+  // Recorded, never used to derive anything. null until the user answers.
+  hasPass: null,
+  secret: null, seedFp: '', seedErr: '',
 
   // split
   n: 5, m: 3, shares: [],
 
   // writing shares onto keys
   written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1,
-  // Index of the share whose key has been checked and found free. The check is
-  // its own press because a read and a write cannot share one — see
-  // existingShareOnKey().
-  checkedFor: -1,
-  // { rec, credId } when the check found a share already on the key, so it can
-  // be erased without a second read.
-  foundOnKey: null, urlCopied: false,
+  // Set when create() refuses a key that already holds a share from this
+  // backup, so the address for deleting it can be offered.
+  occupiedKey: false, urlCopied: false,
 
   // read-back gate
   vRecords: [], verifyMsg: '', verifyOk: null,
 
   // restore
   rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
-  rSeed: '', rFp: '', rKind: '', rAlt: '',
+  rSeed: '', rFp: '', rKind: '', rAlt: '', rHasPass: false,
   reveal: false, seedCopied: false,
 
   env: envReport()
@@ -1377,28 +1363,31 @@ function copyText(text) {
 var seedToken = 0;
 
 function readEnteredSeed() {
-  var phrase = seedPhrase(), pass = state.inputPass;
+  var phrase = seedPhrase();
   if (isSlip39()) {
-    // A Trezor single-share backup is a 20-word 1-of-1 SLIP-39 mnemonic, and
-    // its master secret is the BIP-32 seed directly.
-    return combineMnemonics([phrase], pass).then(function (secret) {
+    // Here the passphrase decrypts the input: without it these words yield a
+    // different secret and nothing says so. The master secret is the BIP-32
+    // seed directly, which is what makes 20-word input lossless.
+    return combineMnemonics([phrase], state.inputPass).then(function (secret) {
       return { secret: secret, seed: secret };
     });
   }
   // BIP-39 runs the words through PBKDF2 to reach the seed, so the entropy we
-  // split and the seed we fingerprint are different values.
+  // split and the seed we fingerprint are different values. Always an empty
+  // passphrase: a wallet passphrase is recorded as a flag and never used, which
+  // is what keeps this fingerprint reproducible at restore.
   return bip39ToEntropy(phrase).then(function (entropy) {
-    return bip39Seed(phrase, pass).then(function (seed) {
+    return bip39Seed(phrase, '').then(function (seed) {
       return { secret: entropy, seed: seed };
     });
   });
 }
 
-/* The fingerprint a restore can reproduce unaided: always derived with an
-   empty passphrase, so it never depends on something the user has to
-   remember. The *displayed* fingerprint identifies the wallet and folds in a
-   BIP-39 passphrase; this one only has to prove the bytes came back intact.
-   Both sides call this same function so they cannot drift apart. */
+/* Fingerprint of a recovered secret, for checking a restore against the value
+   stored on the keys. Always an empty passphrase, matching how the backup side
+   derives it — a wallet passphrase is recorded as a flag and never used, so
+   this is reproducible without knowing it. That is the whole reason one
+   fingerprint field is enough. */
 function verificationFingerprint(secret, of) {
   if (of === 'bip39-128' || of === 'bip39-256') {
     return bip39FromEntropy(secret).then(function (phrase) {
@@ -1412,22 +1401,19 @@ function refreshSeed() {
   var token = ++seedToken;
   if (!allWordsIn()) {
     if (state.secret || state.seedFp || state.seedErr) {
-      setState({ secret: null, seedFp: '', verifyFp: '', seedErr: '' });
+      setState({ secret: null, seedFp: '', seedErr: '' });
     }
     return;
   }
   readEnteredSeed().then(function (r) {
     if (token !== seedToken) return;
     setState({ secret: r.secret, seedErr: '' });
-    return Promise.all([
-      bip32Fingerprint(r.seed),
-      verificationFingerprint(r.secret, originKind())
-    ]).then(function (fps) {
-      if (token === seedToken) setState({ seedFp: fps[0], verifyFp: fps[1] });
+    return bip32Fingerprint(r.seed).then(function (f) {
+      if (token === seedToken) setState({ seedFp: f });
     });
   }).catch(function (e) {
     if (token === seedToken) {
-      setState({ secret: null, seedFp: '', verifyFp: '', seedErr: e.message });
+      setState({ secret: null, seedFp: '', seedErr: e.message });
     }
   });
 }
@@ -1500,15 +1486,23 @@ function renderSeed() {
     setVal($('input', el), state.words[i] || '');
   });
   setVal($('#input-pass'), state.inputPass);
-  setText($('#pass-help'), isSlip39()
-    ? 'Decrypts this share. A wrong one silently produces a different secret — check the '
-    + 'fingerprint below against what you recorded.'
-    : 'Changes which wallet the phrase opens, and so the fingerprint. It is NOT stored in the '
-    + 'shares — you must remember it separately to restore this wallet.');
-  $('#seed-next').disabled = !state.secret;
+  show($('#decrypt-pass-wrap'), isSlip39());
+  $('#pass-no').classList.toggle('is-on', state.hasPass === false);
+  $('#pass-yes').classList.toggle('is-on', state.hasPass === true);
+  setText($('#pass-help'), state.hasPass === null
+    ? 'Answer this so a restore can tell you whether the recovered words are enough on their own.'
+    : state.hasPass
+      ? 'Recorded on every key. The passphrase itself is never asked for or stored — that is what '
+        + 'keeps it a second factor, and it is the one thing no number of keys can recover. The '
+        + 'fingerprint below is the wallet without it, so it will not match what your wallet shows.'
+      : 'The words alone will open this wallet, and the fingerprint below identifies it.');
+  // Answering is required: a restore has no way to work it out later.
+  $('#seed-next').disabled = !state.secret || state.hasPass === null;
   setText($('#seed-fp'), state.seedFp);
   show($('#seed-fp-wrap'), !!state.seedFp);
-  show($('#seed-blocked'), !allWordsIn());
+  show($('#seed-blocked'), !allWordsIn() || state.hasPass === null);
+  setText($('#seed-blocked'), !allWordsIn() ? 'Fill in every word to continue'
+    : 'Answer the passphrase question to continue');
   setText($('#seed-err'), state.seedErr);
   show($('#seed-err'), !!state.seedErr);
 }
@@ -1566,13 +1560,10 @@ function renderWrite() {
     show($('.row-body', el), active);
     show($('.row-done', el), !!done);
     if (active) {
-      // Two presses: check the key is free, then write. They cannot be merged.
-      var checked = state.checkedFor === i;
-      var occupied = !!state.foundOnKey;
+      var occupied = state.occupiedKey;
       setVal($('.f-label', el), state.keyLabel);
       $('.f-label', el).disabled = resuming;
       $('.f-write', el).disabled = state.busy;
-      $('.f-write', el).dataset.act = (checked || resuming) ? 'write-key' : 'check-key';
       show($('.f-addr', el), occupied && !state.busy);
       setText($('.f-addr-url', el), KEYS_SETTINGS_URL);
       setText($('.f-addr-done', el), state.urlCopied ? 'Copied' : '');
@@ -1581,16 +1572,13 @@ function renderWrite() {
       setText($('.f-err-tail', el), occupied ? 'under Sign-in data.' : '');
       show($('.spinner', el), state.busy);
       setText($('.f-write-text', el), state.busy ? 'Follow the prompts…'
-        : (checked || resuming) ? 'Write the share to this key' : 'Check this key');
+        : resuming ? 'Try storing the share again' : 'Write the share to this key');
       setText($('.f-hint', el), state.busy ? 'PIN and touch'
         // Nothing here when occupied: the error and the address line below say
         // it, and a hint above the error explains a problem before stating it.
         : occupied ? ''
           : resuming ? 'This key is already set up — this press only stores the share on it'
-            : checked ? 'Key is free. Leave it plugged in — this press stores the share.'
-              // Deliberately not "checks the key can store a blob" — that is only
-              // knowable from create(), on the next press.
-              : 'Step 1 of 2 · confirms the key answers and holds no share yet');
+            : 'Share ' + (i + 1) + ' of ' + state.n);
       setText($('.f-err', el), state.writeErr);
     }
     if (done) {
@@ -1685,6 +1673,13 @@ function renderRestored() {
   setText($('#copy-seed-btn'), state.seedCopied ? 'Copied' : 'Copy phrase');
   setText($('#restored-alt'), state.rAlt);
   show($('#restored-alt'), !!state.rAlt);
+  setText($('#restored-pass'), state.rHasPass
+    ? 'This wallet uses a passphrase. These words alone will not open it — the passphrase was '
+      + 'never stored in this backup and cannot be recovered from the keys. Enter it in your '
+      + 'wallet as well. The fingerprint above is the wallet without it, so expect your wallet '
+      + 'to show a different one.'
+    : '');
+  show($('#restored-pass'), !!state.rHasPass);
 }
 
 function renderEnv() {
@@ -1726,7 +1721,7 @@ var DEMO = {
 };
 
 function setCount(n) {
-  setState({ count: n, words: fill(n, ''), secret: null, seedFp: '', verifyFp: '', seedErr: '' });
+  setState({ count: n, words: fill(n, ''), secret: null, seedFp: '', seedErr: '' });
 }
 
 function doSplit() {
@@ -1737,41 +1732,17 @@ function doSplit() {
   generateShares(state.secret, state.m, state.n, '').then(function (shares) {
     setState({
       shares: shares, written: [], busy: false, step: 2, keyLabel: '',
-      revealed: -1, checkedFor: -1, foundOnKey: null
+      revealed: -1, occupiedKey: false
     });
   }).catch(function (e) {
     setState({ busy: false, seedErr: e.message });
   });
 }
 
-/* Press one: is this key free? A read cannot share a press with the write, so
-   this is a step of its own rather than something hidden inside doWrite(). */
-function doCheckKey() {
-  if (state.busy) return;
-  var i = state.written.length;
-  if (i >= state.n) return;
-  setState({ busy: true, writeErr: '' });
-  existingShareOnKey().then(function (found) {
-    if (found) {
-      var r = found.rec;
-      setState({
-        busy: false, checkedFor: -1, foundOnKey: found,
-        writeErr: 'This key already holds share ' + (r.i + 1) + ' of ' + r.n
-          + (r.label ? ' ("' + r.label + '")' : '')
-          + (r.fp ? ', fingerprint ' + r.fp : '')
-          + '. Use a different key, or free this one by deleting its credential in Chrome at'
-      });
-      return;
-    }
-    setState({ busy: false, checkedFor: i, writeErr: '', foundOnKey: null });
-  }).catch(function (e) {
-    setState({ busy: false, writeErr: friendlyAuthError(e).message, foundOnKey: null });
-  });
-}
 
 
-/* Press two: create the credential and write the share. These two stay in the
-   same press — that pairing is what works. */
+/* One press: create the credential, then write the blob in the same gesture. That
+   pairing is the only sequence proven to work — see writeShareToKey(). */
 function doWrite() {
   if (state.busy) return;
   var i = state.written.length;
@@ -1779,17 +1750,21 @@ function doWrite() {
   var label = state.keyLabel.trim() || 'YubiKey ' + (i + 1);
   setState({ busy: true, writeErr: '' });
   writeShareToKey({
-    v: RECORD_VERSION, share: state.shares[i], of: originKind(), rp: rpId(),
+    share: state.shares[i], of: originKind(), rp: rpId(),
     n: state.n, m: state.m, i: i, label: label,
-    fp: state.seedFp, vfp: state.verifyFp,
+    fp: state.seedFp, hasPass: !!state.hasPass,
     created: new Date().toISOString().slice(0, 10)
   }).then(function () {
     setState({
       written: state.written.concat([{ label: label }]),
-      busy: false, keyLabel: '', checkedFor: -1, foundOnKey: null
+      busy: false, keyLabel: '', occupiedKey: false
     });
   }).catch(function (e) {
-    setState({ busy: false, writeErr: e.message });
+    // InvalidStateError means the authenticator refused because this key already
+    // holds a credential from this backup — the one duplicate check that works
+    // without reading the key first.
+    var dup = e && /already holds a share/.test(e.message);
+    setState({ busy: false, writeErr: e.message, occupiedKey: dup });
   });
 }
 
@@ -1846,18 +1821,19 @@ function presentSecret(secret, of, recordedFp) {
   });
 }
 
-function finishRestore(mnemonics, of, recordedFp, recordedVfp) {
+function finishRestore(mnemonics, of, recordedFp, hasPass) {
   var recovered;
   return combineMnemonics(mnemonics, '').then(function (secret) {
     recovered = secret;
-    // For a threshold of 1 there is no digest share, so nothing in SLIP-39
-    // itself would notice a corrupted share — this comparison is the only
-    // thing standing between the user and a silently wrong wallet.
-    if (!recordedVfp) return null;
+    // The stored fingerprint is always derived with an empty passphrase, so it
+    // can always be recomputed here. A mismatch means the recovered bytes are
+    // not the ones that were backed up — worth stopping for, on top of the
+    // per-share checksum and SLIP-39's own digest share.
+    if (!recordedFp) return null;
     return verificationFingerprint(secret, of).then(function (f) {
-      if (f !== recordedVfp) {
+      if (f !== recordedFp) {
         throw new Error('These shares rebuild a different wallet than the one that was backed '
-          + 'up — got ' + f + ', the keys record ' + recordedVfp + '. Do not use this result.');
+          + 'up — got ' + f + ', the keys record ' + recordedFp + '. Do not use this result.');
       }
       return true;
     });
@@ -1872,7 +1848,7 @@ function finishRestore(mnemonics, of, recordedFp, recordedVfp) {
     return verificationFingerprint(recovered, of).then(function (f) { r.fp = f; return r; });
   }).then(function (r) {
     setState({
-      rSeed: r.text, rKind: r.kind, rFp: r.fp, rAlt: r.alt,
+      rSeed: r.text, rKind: r.kind, rFp: r.fp, rAlt: r.alt, rHasPass: !!hasPass,
       busy: false, step: 1, reveal: false, readErr: ''
     });
   });
@@ -1899,7 +1875,7 @@ function doRestoreRead() {
     }
     setState({ rRecords: recs });
     return finishRestore(recs.map(function (r) { return r.share; }),
-      recs[0].of, recs[0].fp, recs[0].vfp);
+      recs[0].of, recs[0].fp, recs[0].hasPass);
   }).catch(function (e) {
     setState({ busy: false, readErr: e.message });
   });
@@ -1910,7 +1886,7 @@ function doPasteCombine() {
   if (!list.length) return;
   setState({ busy: true, readErr: '' });
   // No record, so no origin and nothing to verify against.
-  finishRestore(list, null, '', '').catch(function (e) {
+  finishRestore(list, null, '', false).catch(function (e) {
     setState({ busy: false, readErr: e.message });
   });
 }
@@ -1920,12 +1896,13 @@ function wipe() {
   pendingCred = null;
   setState({
     view: 'home', step: 0, count: 12, words: fill(12, ''), inputPass: '',
-    secret: null, seedFp: '', verifyFp: '', seedErr: '', n: 5, m: 3, shares: [],
-    written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1, checkedFor: -1,
-    foundOnKey: null, urlCopied: false,
+    secret: null, seedFp: '', seedErr: '', hasPass: null, n: 5, m: 3, shares: [],
+    written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1,
+    occupiedKey: false, urlCopied: false,
     vRecords: [], verifyMsg: '', verifyOk: null,
     rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
-    rSeed: '', rFp: '', rKind: '', rAlt: '', reveal: false, seedCopied: false
+    rSeed: '', rFp: '', rKind: '', rAlt: '', rHasPass: false,
+    reveal: false, seedCopied: false
   });
 }
 
@@ -1938,10 +1915,16 @@ var CLICKS = {
   count12: function () { setCount(12); },
   count20: function () { setCount(20); },
   count24: function () { setCount(24); },
-  demo: function () { setState({ words: DEMO[state.count].split(' ') }); refreshSeed(); },
-  'seed-next': function () { if (state.secret) setState({ step: 1 }); },
+  'pass-no': function () { setState({ hasPass: false }); },
+  'pass-yes': function () { setState({ hasPass: true }); },
+  demo: function () {
+    setState({ words: DEMO[state.count].split(' '), hasPass: false });
+    refreshSeed();
+  },
+  'seed-next': function () {
+    if (state.secret && state.hasPass !== null) setState({ step: 1 });
+  },
   'split-next': doSplit,
-  'check-key': doCheckKey,
   'copy-keys-url': function () {
     copyText(KEYS_SETTINGS_URL).then(function (ok) {
       setState({ urlCopied: ok });

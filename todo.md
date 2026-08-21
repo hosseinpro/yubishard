@@ -1,8 +1,3 @@
 claude
 
-what is in the blob. it should be:
-domain
-label
-n-of-m
-share
-fingerprint
+in the first page diagram, all yubikeys seeds start with "glimpse helpful academic". use different words for each one. 

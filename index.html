@@ -123,17 +123,30 @@
           </div>
           <div class="wordgrid" id="wordgrid"></div>
           <div class="card" style="margin-top:16px">
-            <label class="field">
-              <span class="field-label">Passphrase <span>(optional)</span></span>
+            <!-- Only recorded as a flag. The passphrase itself is never asked for
+                 and never stored: keeping it out is what makes it a second
+                 factor that stolen keys cannot defeat. -->
+            <span class="field-label">Does this wallet use a passphrase?</span>
+            <div class="wordbar" style="margin-top:8px">
+              <button class="chip" id="pass-no" data-act="pass-no">No</button>
+              <button class="chip" id="pass-yes" data-act="pass-yes">Yes</button>
+            </div>
+            <p class="field-help" id="pass-help" style="margin-top:10px"></p>
+            <!-- Shown only for a 20-word SLIP-39 input, where the passphrase is
+                 needed to decrypt the mnemonic rather than to pick a wallet. -->
+            <label class="field" id="decrypt-pass-wrap" style="margin-top:14px" hidden>
+              <span class="field-label">Passphrase for this share</span>
               <input class="text" type="password" id="input-pass" data-act="inputpass"
-                placeholder="Leave empty if you never set one">
-              <span class="field-help" id="pass-help"></span>
+                placeholder="The one that unlocks these 20 words">
+              <span class="field-help">Needed to read the share. Without it the words decode to a
+                different secret, with no way to tell.</span>
             </label>
           </div>
           <div class="actions">
             <button class="btn btn-primary" id="seed-next" data-act="seed-next">Continue</button>
             <span class="note" id="seed-fp-wrap" hidden>Wallet fingerprint
-              <span class="mono" id="seed-fp"></span> — write it down; a restore must show the same</span>
+              <span class="mono" id="seed-fp"></span> — stored on every key, so a restore shows it
+              back to you</span>
             <span class="note" id="seed-blocked">Fill in every word to continue</span>
           </div>
           <div class="err-line" id="seed-err" hidden></div>
@@ -238,9 +251,12 @@
           <div class="badge-ok">Seed reconstructed</div>
           <h2 class="title">Here is your recovery phrase</h2>
           <p class="sub"><span id="restored-kind"></span> · wallet fingerprint
-            <span class="mono" id="restored-fp"></span>. It must match the one you recorded at backup.
-            Close this tab as soon as you have what you need.
+            <span class="mono" id="restored-fp"></span>. Close this tab as soon as you have what you
+            need.
           </p>
+          <!-- Shown when the backup recorded that the wallet needs a passphrase.
+               Without this, an empty balance looks like a failed restore. -->
+          <div class="err-line" id="restored-pass" hidden></div>
           <div class="reveal-wrap">
             <div class="words-out is-hidden" id="words-out"></div>
           </div>

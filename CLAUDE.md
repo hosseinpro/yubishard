@@ -168,23 +168,18 @@ the fingerprint.
   returns the wrong one — which looks exactly like a failed write, and led to a two-press UI and a
   `written: false` theory that were both wrong. Clear all credentials before drawing any conclusion
   about the write path.
-- **A read and a write cannot share one user press.** A discoverable-credential `get()` leaves
-  Chrome holding a PIN token without the large-blob-write permission, so anything chained behind it
-  in that press gets `written: false` — confirmed on both a cluttered and a clean authenticator. A
-  new press gets a fresh token. Hence the flow: press one is `existingShareOnKey()`, press two is
-  `create()` + `writeBlob()`. Those last two must stay together; that pairing is the one known to
-  work. `state.checkedFor` carries the result between presses.
-- **A page cannot delete a credential, and cannot open Chrome's settings either.** WebAuthn has no
-  delete; that needs `chrome://settings/securityKeys`. And Chrome blocks web
-  content from navigating to `chrome://` at all — `window.open` returns null, an anchor click and a
-  `location.href` assignment are both silently ignored, all three verified. So the UI can only offer
-  the address to copy. Overwriting the blob instead was tried and rejected: it destroys the share
-  but leaves the credential occupying a resident slot, which is a half-measure.
-- **The credential id comes from the assertion.** `existingShareOnKey()` returns `assertion.rawId`
-  alongside the record. Nothing needs it right now, but it is the only way to obtain one.
-- **`excludeCredentials` is a backstop, not the check.** It only knows credentials made since the
-  page loaded, and Chrome's DevTools virtual authenticator ignores it outright — which is why
-  duplicate writes appeared to be allowed there even though the code was correct.
+- **Never do a discoverable-credential read before a write. Three separate failures came from it.**
+  A `get()` with an empty `allowCredentials` looks like the obvious way to ask "does this key
+  already hold a share", and it fails three ways: chained into the same press it makes the write
+  return `written: false`; split into its own press it still costs an extra ceremony; and on real
+  hardware it raises a Chrome error and leaves the YubiKey unresponsive until it is physically
+  re-inserted. The virtual authenticator hides the last one entirely. There is no cross-session
+  duplicate check as a result.
+- **`excludeCredentials` is the only duplicate check.** It covers reuse within one page load, which
+  is the realistic mistake, and costs no extra ceremony. It cannot see across a reload. Chrome's
+  DevTools virtual authenticator ignores it, so this can only be tested on hardware — where a
+  refusal surfaces as `InvalidStateError` and the UI offers the settings address for deleting the
+  credential.
 - **Reuse `pendingCred` on retry, never call `create()` again.** Each registration burns a resident
   slot (25 before firmware 5.7, 100 after), and once a key holds several credentials for one origin
   Chrome shows an account picker on every read, which breaks the restore flow.
@@ -207,17 +202,22 @@ the fingerprint.
 - **The PIN is not optional and cannot be set from the page.** largeBlob needs a discoverable
   credential, YubiKey will not expose those without a PIN, and Chrome escalates credProtect to
   `userVerificationRequired` anyway. Chrome prompts the user to create one if the key has none.
-- **The record** is JSON: `{ v, share, of, rp, n, m, i, label, fp, created }`. `of` and `fp` are what
-  let a restore render the right encoding and show the fingerprint that was recorded at backup.
-  Budget is ~960 bytes; the code caps at 900.
-
-Known accepted risk, decided deliberately: Yubico states largeBlob "is not meant to be used to store
-sensitive data" because the per-credential blob key crosses the wire in the clear. `hmac-secret`/PRF
-would avoid that but was rejected in favour of keeping the share on the key itself. Do not quietly
-switch this without raising it.
-
-## Origin caveats already handled
-
+- **The record's field names live in README.md** under "What is stored on each key", not in a
+  comment here — it is user-facing documentation, and someone recovering a key years from now will
+  have the README, not the source. `toBlobRecord()` and `fromBlobRecord()` are the only places those
+  verbose names appear; the rest of the app uses short internal names. Keep the translation in one
+  place.
+- **One fingerprint, and the passphrase is only a flag.** `bip32-fingerprint` is always derived
+  with an *empty* passphrase, so a restore can always recompute and check it — which is why there is
+  no second fingerprint field. A wallet passphrase is recorded as `passphrase-protected: true` and
+  nothing more: never asked for, never used in any derivation, never stored. Keeping it out is what
+  makes it a second factor that stolen keys cannot defeat, and it is the one thing no quorum can
+  recover. Consequence to keep in the copy: for a passphrase-protected wallet the stored fingerprint
+  is *not* what the user's wallet will show.
+- **Do not offer to "remove" a passphrase.** The only way is to split the 512-bit seed instead of
+  the entropy. It works — 59-word shares, recovers without the passphrase — but Trezor's on-device
+  recovery accepts 20/33 words only, restore can no longer return BIP-39 words, and the second
+  factor is gone. Rejected deliberately.
 - `navigator.clipboard` may be missing or reject on some origins; `copyText()` falls back to a hidden
   textarea plus `execCommand('copy')` and only reports "Copied" on success.
 - `envReport()` gates the app: `file://`, a non-secure context, a bare IP hostname, and non-Chromium
