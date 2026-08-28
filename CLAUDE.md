@@ -92,6 +92,18 @@ DOM rather than returning anything; it dispatches to one `renderX()` per panel.
 `.env-note.is-blocked`). Do not compute color strings in JS and interpolate them into `style`
 attributes — that was the previous design and it is what made the file unreadable.
 
+**Three CSS rules deliberately cross section boundaries.** `styles.css` is otherwise organised by
+screen, but these are one component appearing in two of them, and splitting them back apart is how
+the duplication returns:
+
+- `.step-dot, .row-dot` — the numbered circle in the stepper and the one on a share row. Only the
+  size and the row's mono digits differ, so the `.is-done` / `.is-active` colouring is shared as
+  well. Both live in the *flow shell* section; `.row-dot` carries only its size override.
+- `.wordgrid, .words-out` — phrase entry and the restored phrase are the same 3-or-4 column grid,
+  and so are their `.cols-4` variants. Only the entry one is boxed.
+- `.viz` sets `color` so its `<span>` inherits it, which is what lets `.viz.is-needed` recolour the
+  label without a second rule. `.viz i` paints from `background`, never `currentColor`.
+
 **`syncList(container, tplId, count, update)`** grows or shrinks a list to `count` by appending or
 removing tail nodes, then updates each child in place. Surviving nodes are never replaced. This is
 what lets a full re-render happen on every keystroke without destroying focus — do not swap it for an
