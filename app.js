@@ -916,9 +916,6 @@ function bip39Seed(phrase, passphrase) {
 
 var RECORD_VERSION = 1;
 
-/* The blob's wire format — documented in README.md under "What is stored on
-   each key". These two functions are the only place the verbose field names
-   appear; the rest of the app uses short ones. Keep it that way. */
 function toBlobRecord(o) {
   var rec = {
     'version': RECORD_VERSION,
@@ -1324,6 +1321,150 @@ function syncList(container, tplId, count, update) {
   }
 }
 
+
+var BUNDLE_FILES = [
+  { name: 'index.html', mode: 0o644 },
+  { name: 'styles.css', mode: 0o644 },
+  { name: 'app.js', mode: 0o644 },
+  { name: 'serve.command', mode: 0o755 },
+  { name: 'serve.bat', mode: 0o644 }
+];
+
+var CRC_TABLE = (function () {
+  var t = new Uint32Array(256), c, i, k;
+  for (i = 0; i < 256; i++) {
+    c = i;
+    for (k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  var c = 0xffffffff;
+  for (var i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function deflate(bytes) {
+  if (typeof CompressionStream !== 'function') {
+    return Promise.resolve({ method: 0, data: bytes });
+  }
+  try {
+    var cs = new CompressionStream('deflate-raw');
+    return new Response(new Blob([bytes]).stream().pipeThrough(cs)).arrayBuffer()
+      .then(function (buf) { return { method: 8, data: new Uint8Array(buf) }; },
+            function () { return { method: 0, data: bytes }; });
+  } catch (e) {
+    return Promise.resolve({ method: 0, data: bytes });
+  }
+}
+
+function dosTime(d) {
+  return ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff;
+}
+
+function dosDate(d) {
+  return (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff;
+}
+
+function buildZip(entries) {
+  var now = new Date(), time = dosTime(now), date = dosDate(now);
+  var chunks = [], central = [], offset = 0;
+
+  entries.forEach(function (e) {
+    var name = utf8.encode(e.name);
+    var local = new Uint8Array(30 + name.length);
+    var dv = new DataView(local.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 0, true);
+    dv.setUint16(8, e.method, true);
+    dv.setUint16(10, time, true);
+    dv.setUint16(12, date, true);
+    dv.setUint32(14, e.crc, true);
+    dv.setUint32(18, e.data.length, true);
+    dv.setUint32(22, e.raw, true);
+    dv.setUint16(26, name.length, true);
+    local.set(name, 30);
+    chunks.push(local, e.data);
+
+    var cd = new Uint8Array(46 + name.length);
+    var cv = new DataView(cd.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 0x031e, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(10, e.method, true);
+    cv.setUint16(12, time, true);
+    cv.setUint16(14, date, true);
+    cv.setUint32(16, e.crc, true);
+    cv.setUint32(20, e.data.length, true);
+    cv.setUint32(24, e.raw, true);
+    cv.setUint16(28, name.length, true);
+    cv.setUint32(38, (e.mode & 0xffff) << 16, true);
+    cv.setUint32(42, offset, true);
+    cd.set(name, 46);
+    central.push(cd);
+
+    offset += local.length + e.data.length;
+  });
+
+  var cdSize = central.reduce(function (n, c) { return n + c.length; }, 0);
+  var end = new Uint8Array(22);
+  var ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, entries.length, true);
+  ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, offset, true);
+
+  return new Blob(chunks.concat(central, [end]), { type: 'application/zip' });
+}
+
+var bundleUrl = null, bundlePending = null;
+
+function prepareBundle() {
+  if (bundleUrl) return Promise.resolve(bundleUrl);
+  if (bundlePending) return bundlePending;
+  bundlePending = Promise.all(BUNDLE_FILES.map(function (f) {
+    return fetch(f.name).then(function (r) {
+      if (!r.ok) throw new Error(f.name + ' — ' + r.status);
+      return r.arrayBuffer();
+    }).then(function (buf) {
+      var bytes = new Uint8Array(buf);
+      return deflate(bytes).then(function (z) {
+        return { name: f.name, mode: f.mode, raw: bytes.length,
+                 crc: crc32(bytes), method: z.method, data: z.data };
+      });
+    });
+  })).then(function (entries) {
+    bundleUrl = URL.createObjectURL(buildZip(entries));
+    var a = $('#dl-link');
+    if (a) {
+      a.href = bundleUrl;
+      a.download = 'yubishard.zip';
+      a.removeAttribute('data-act');
+    }
+    return bundleUrl;
+  }).catch(function (e) {
+    bundlePending = null;
+    throw e;
+  });
+  return bundlePending;
+}
+
+// Only reached if the link is clicked before the bundle finished building.
+function downloadBundle() {
+  prepareBundle().then(function (url) {
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'yubishard.zip';
+    a.click();
+  }).catch(function (e) {
+    window.alert('Could not build the download: ' + e.message);
+  });
+}
+
 /* ============================================================
    Clipboard
    ============================================================ */
@@ -1684,8 +1825,9 @@ function renderRestored() {
 
 function renderEnv() {
   $('#env-banner').innerHTML = state.env.html;
-  // The "download and run it locally" prompt is noise once you already are.
-  show($('#dl-banner'), location.hostname !== 'localhost');
+  var offsite = location.hostname !== 'localhost';
+  show($('#dl-banner'), offsite);
+  if (offsite) prepareBundle().catch(function () {});
 }
 
 function render() {
@@ -1908,6 +2050,7 @@ function wipe() {
 
 var CLICKS = {
   home: function () { setState({ view: 'home' }); },
+  'download-bundle': downloadBundle,
   theme: function () { setState({ dark: !state.dark }); },
   backup: function () { setState({ view: 'backup', step: 0 }); },
   restore: function () { setState({ view: 'restore', step: 0 }); },
