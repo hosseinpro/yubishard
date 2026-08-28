@@ -946,6 +946,8 @@ function fromBlobRecord(j) {
 // Chrome refuses to navigate to chrome:// from a web page, so this can only
 // ever be copied for the user to paste — never opened by a link or window.open.
 var KEYS_SETTINGS_URL = 'chrome://settings/securityKeys';
+
+var HOSTED_URL = 'https://yubishard.com/';
 var BLOB_BUDGET = 900;   // spec guarantees >= 1024 serialized; leave headroom
 
 function rpId() { return location.hostname; }
@@ -1192,6 +1194,19 @@ function readShareFromKey() {
    is the reason a server is required, not TLS.
    ============================================================ */
 
+function localhostUrl() {
+  return location.protocol + '//localhost' + (location.port ? ':' + location.port : '')
+    + location.pathname + location.search;
+}
+
+function isLoopbackHost(h) {
+  return h === 'localhost' || /^127\./.test(h) || h === '[::1]' || h === '::1';
+}
+
+function runningLocally() {
+  return location.protocol !== 'file:' && isLoopbackHost(location.hostname);
+}
+
 function envReport() {
   if (location.protocol === 'file:') {
     return {
@@ -1201,18 +1216,25 @@ function envReport() {
         + 'this folder and open <code>http://localhost:8000/</code>.'
     };
   }
+  var host = location.hostname;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.indexOf(':') >= 0) {
+    if (isLoopbackHost(host)) {
+      return {
+        ok: false, html: 'Use <a href="' + localhostUrl() + '"><code>' + localhostUrl()
+          + '</code></a>, not an IP address.'
+      };
+    }
+    return {
+      ok: false, html: '<b>Use a hostname, not an IP address.</b> A bare IP can never identify a '
+        + 'site to a security key, and this page is served from another machine, so '
+        + '<code>localhost</code> will not reach it. Open <a href="' + HOSTED_URL + '"><code>'
+        + HOSTED_URL + '</code></a>, or download YubiShard and run it on your own machine.'
+    };
+  }
   if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials) {
     return {
       ok: false, html: '<b>This browser cannot use security keys here.</b> YubiShard needs '
         + 'Chrome on macOS or Windows 11, opened over <code>http://localhost</code> or https.'
-    };
-  }
-  var host = location.hostname;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.indexOf(':') >= 0) {
-    return {
-      ok: false, html: '<b>Use <code>localhost</code>, not an IP address.</b> A bare IP can '
-        + 'never identify a site to a security key. Open <code>http://localhost:'
-        + (location.port || '8000') + '/</code> instead.'
     };
   }
   var parts = [];
@@ -1221,11 +1243,9 @@ function envReport() {
       + 'largeBlob extension, which Firefox does not implement and does not plan to. Use Chrome.');
   }
   parts.push('Keys enrolled here are tied to <b><code>' + esc(host) + '</code></b> and can only be '
-    + 'read back at this same address.');
-  if (host !== 'localhost') {
-    parts.push('<b>You are running this from yubishard.com.</b> The code reached you over the network '
-      + 'moments before your seed enters this tab\'s memory, and if this domain ever lapses the '
-      + 'shares on those keys can never be read again. Serving the file locally avoids both.');
+    + 'read back at this same URL.');
+  if (!isLoopbackHost(host)) {
+    parts.push('If this domain ever lapses, they are lost. Running it locally avoids that.');
   }
   return { ok: true, html: parts.join(' ') };
 }
@@ -1354,7 +1374,7 @@ function deflate(bytes) {
     var cs = new CompressionStream('deflate-raw');
     return new Response(new Blob([bytes]).stream().pipeThrough(cs)).arrayBuffer()
       .then(function (buf) { return { method: 8, data: new Uint8Array(buf) }; },
-            function () { return { method: 0, data: bytes }; });
+        function () { return { method: 0, data: bytes }; });
   } catch (e) {
     return Promise.resolve({ method: 0, data: bytes });
   }
@@ -1433,8 +1453,10 @@ function prepareBundle() {
     }).then(function (buf) {
       var bytes = new Uint8Array(buf);
       return deflate(bytes).then(function (z) {
-        return { name: f.name, mode: f.mode, raw: bytes.length,
-                 crc: crc32(bytes), method: z.method, data: z.data };
+        return {
+          name: f.name, mode: f.mode, raw: bytes.length,
+          crc: crc32(bytes), method: z.method, data: z.data
+        };
       });
     });
   })).then(function (entries) {
@@ -1634,8 +1656,8 @@ function renderSeed() {
     ? 'Answer this so a restore can tell you whether the recovered words are enough on their own.'
     : state.hasPass
       ? 'Recorded on every key. The passphrase itself is never asked for or stored — that is what '
-        + 'keeps it a second factor, and it is the one thing no number of keys can recover. The '
-        + 'fingerprint below is the wallet without it, so it will not match what your wallet shows.'
+      + 'keeps it a second factor, and it is the one thing no number of keys can recover. The '
+      + 'fingerprint below is the wallet without it, so it will not match what your wallet shows.'
       : 'The words alone will open this wallet, and the fingerprint below identifies it.');
   // Answering is required: a restore has no way to work it out later.
   $('#seed-next').disabled = !state.secret || state.hasPass === null;
@@ -1816,18 +1838,18 @@ function renderRestored() {
   show($('#restored-alt'), !!state.rAlt);
   setText($('#restored-pass'), state.rHasPass
     ? 'This wallet uses a passphrase. These words alone will not open it — the passphrase was '
-      + 'never stored in this backup and cannot be recovered from the keys. Enter it in your '
-      + 'wallet as well. The fingerprint above is the wallet without it, so expect your wallet '
-      + 'to show a different one.'
+    + 'never stored in this backup and cannot be recovered from the keys. Enter it in your '
+    + 'wallet as well. The fingerprint above is the wallet without it, so expect your wallet '
+    + 'to show a different one.'
     : '');
   show($('#restored-pass'), !!state.rHasPass);
 }
 
 function renderEnv() {
   $('#env-banner').innerHTML = state.env.html;
-  var offsite = location.hostname !== 'localhost';
+  var offsite = !runningLocally();
   show($('#dl-banner'), offsite);
-  if (offsite) prepareBundle().catch(function () {});
+  if (offsite) prepareBundle().catch(function () { });
 }
 
 function render() {

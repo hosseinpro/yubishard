@@ -1078,6 +1078,12 @@ input[type=range] {
   font-weight: 600;
 }
 
+.env-warn a {
+  color: inherit;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
 .env-warn code,
 .banner code {
   font: 12px var(--mono);
