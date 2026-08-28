@@ -127,11 +127,10 @@
                  and never stored: keeping it out is what makes it a second
                  factor that stolen keys cannot defeat. -->
             <span class="field-label">Does this wallet use a passphrase?</span>
-            <div class="wordbar" style="margin-top:8px">
+            <div class="wordbar" style="margin:8px 0 0">
               <button class="chip" id="pass-no" data-act="pass-no">No</button>
               <button class="chip" id="pass-yes" data-act="pass-yes">Yes</button>
             </div>
-            <p class="field-help" id="pass-help" style="margin-top:10px"></p>
             <!-- Shown only for a 20-word SLIP-39 input, where the passphrase is
                  needed to decrypt the mnemonic rather than to pick a wallet. -->
             <label class="field" id="decrypt-pass-wrap" style="margin-top:14px" hidden>
@@ -144,10 +143,10 @@
           </div>
           <div class="actions">
             <button class="btn btn-primary" id="seed-next" data-act="seed-next">Continue</button>
-            <span class="note" id="seed-fp-wrap" hidden>Wallet fingerprint
+            <span class="note" id="seed-fp-wrap" hidden><span id="seed-fp-label"></span>
               <span class="mono" id="seed-fp"></span> — stored on every key, so a restore shows it
               back to you</span>
-            <span class="note" id="seed-blocked">Fill in every word to continue</span>
+            <span class="note" id="seed-blocked">Answer the passphrase question to continue</span>
           </div>
           <div class="err-line" id="seed-err" hidden></div>
           <div style="margin-top:18px">
@@ -204,13 +203,9 @@
         <div class="panel" id="p-done" hidden>
           <div class="badge-ok" id="done-badge"></div>
           <h2 class="title">Your backup is ready</h2>
-          <p class="sub">Store the keys in different places. Wallet fingerprint
-            <span class="mono" id="done-fp"></span> — write it down; a future restore must show the
-            same.
+          <p class="sub">Store the keys in different places. <span id="done-fp-label"></span>
+            <span class="mono" id="done-fp"></span> — a future restore must show the same.
           </p>
-          <div class="card">
-            <p class="split-note" id="recovery-note"></p>
-          </div>
           <div class="done-grid" id="done-grid"></div>
           <div class="actions">
             <button class="btn btn-danger" data-act="wipe">Wipe this session</button>
@@ -220,8 +215,7 @@
         <!-- step: read shares back off the keys -->
         <div class="panel" id="p-collect" hidden>
           <h2 class="title">Read your YubiKeys</h2>
-          <p class="sub">Plug in one key at a time and read its share. The threshold is stored with the
-            first share you read, so you will be told how many more you need.</p>
+          <p class="sub">Plug in one key at a time and read its share.</p>
           <div class="rows" id="collect-rows"></div>
           <div class="actions">
             <button class="btn btn-primary" id="read-btn" data-act="read-key">
@@ -231,26 +225,14 @@
             <span class="note" id="collect-hint"></span>
           </div>
           <div class="err-line" id="read-err" hidden></div>
-          <div style="margin-top:18px">
-            <button class="linkbtn" data-act="toggle-paste">Advanced — paste share words instead</button>
-            <div id="paste-wrap" hidden>
-              <p class="split-note">Only useful if you pulled a share off a key some other way, for
-                example with python-fido2. Normally the keys hold everything you need.</p>
-              <div class="rows" id="paste-rows"></div>
-              <div class="actions">
-                <button class="btn btn-outline" data-act="paste-combine">Rebuild from pasted
-                  shares</button>
-                <button class="btn-small" data-act="paste-more">Add another box</button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- step: restored -->
         <div class="panel" id="p-restored" hidden>
           <div class="badge-ok">Seed reconstructed</div>
           <h2 class="title">Here is your recovery phrase</h2>
-          <p class="sub"><span id="restored-kind"></span> · wallet fingerprint
+          <p class="sub"><span id="restored-kind"></span> · <b id="restored-passphrase"></b>
+            · <span id="restored-fp-label"></span>
             <span class="mono" id="restored-fp"></span>. Close this tab as soon as you have what you
             need.
           </p>
@@ -272,10 +254,6 @@
     </main>
 
     <footer class="foot">
-      <span>SLIP-39</span>
-      <span><b>Shares are stored in plain form on your YubiKeys, protected by the key's PIN. Anyone
-          holding enough keys and their PINs has your seed.</b></span>
-      <a href="https://github.com/hosseinpro/yubishard" target="_blank" rel="noopener">Source</a>
       <span class="right">by <a href="https://www.hosspro.com/" target="_blank" rel="noopener">Hossein Rezai</a> · MIT
         licensed</span>
     </footer>
@@ -318,7 +296,6 @@
           <label class="field">
             <span class="field-label">Label for this key</span>
             <input class="text f-label" data-act="keylabel" placeholder="e.g. Home safe — blue key">
-            <span class="field-help">Stored with the share so a restore can tell the keys apart.</span>
           </label>
         </div>
         <div class="actions">
@@ -333,6 +310,7 @@
                is shown to copy rather than linked. Inline, so it reads as the
                end of the sentence above it. -->
           <span class="addr-inline f-addr" hidden>
+            <span class="f-addr-lead"></span>
             <code class="f-addr-url"></code>
             <button class="icon-btn f-addr-copy" data-act="copy-keys-url" type="button" title="Copy address"
               aria-label="Copy address">
@@ -343,14 +321,10 @@
             </button>
             <span class="f-addr-done"></span>
           </span>
-          <span class="f-err-tail"></span>
         </div>
       </div>
       <div class="row-done" hidden>
-        <div class="blobbox f-stored"></div>
-        <div class="blob-actions">
-          <button class="btn-small f-reveal" data-act="reveal-share"></button>
-        </div>
+        <div class="note f-stored"></div>
       </div>
     </div>
   </template>
@@ -363,14 +337,6 @@
         <span class="row-sub"></span>
         <span class="status ok">Read</span>
       </div>
-    </div>
-  </template>
-
-  <template id="tpl-paste-row">
-    <div class="vrow crow">
-      <div class="crow-head"><span></span><span class="hint"></span></div>
-      <textarea class="blobinput" spellcheck="false" data-act="pasteshare"
-        placeholder="Paste the 20 or 33 words of one share"></textarea>
     </div>
   </template>
 

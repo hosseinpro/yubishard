@@ -964,25 +964,8 @@ input[type=range] {
   width: 100%;
 }
 
-.blobbox {
-  font: 12.5px/1.6 var(--mono);
-  background: var(--panel2);
-  border: 1px solid var(--line2);
-  border-radius: 9px;
-  padding: 12px 14px;
-  word-break: break-all;
-  max-height: 112px;
-  overflow: auto;
-}
-
 .row-done {
   margin-top: 14px;
-}
-
-.blob-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
 }
 
 .unlock-body {
@@ -1094,37 +1077,6 @@ input[type=range] {
 
 /* ---------- verify + collect ---------- */
 
-.vrow {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  padding: 18px;
-}
-
-.vrow-title {
-  font-size: 13.5px;
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-
-.blobinput {
-  width: 100%;
-  min-height: 64px;
-  resize: vertical;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel2);
-  padding: 10px 12px;
-  font: 12.5px/1.5 var(--mono);
-}
-
-.vrow .text {
-  margin-top: 10px;
-  background: var(--panel2);
-  height: 38px;
-  font-size: 13.5px;
-}
-
 .result {
   font-size: 13.5px;
   font-weight: 600;
@@ -1136,30 +1088,6 @@ input[type=range] {
 
 .result.err {
   color: var(--danger);
-}
-
-.crow {
-  padding: 16px;
-}
-
-.crow.is-bad {
-  border-color: var(--danger);
-}
-
-.crow .blobinput {
-  min-height: 60px;
-}
-
-.crow-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.crow-head span:first-child {
-  font-size: 13.5px;
-  font-weight: 600;
 }
 
 .hint {
@@ -1229,15 +1157,6 @@ input[type=range] {
   word-break: break-all;
   max-height: 54px;
   overflow: hidden;
-}
-
-.done-card .blob-actions {
-  margin-top: 12px;
-}
-
-.done-card .btn-small {
-  background: var(--panel2);
-  padding: 6px 12px;
 }
 
 .reveal-wrap {

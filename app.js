@@ -983,7 +983,7 @@ function friendlyAuthError(e) {
   if (!e) return new Error('The key did not respond.');
   if (e.name === 'InvalidStateError') {
     return new Error('This key already holds a share from this backup. Use a different key, or '
-      + 'free this one by deleting its credential in Chrome at');
+      + 'free this one by deleting its credential.');
   }
   if (e.name === 'NotAllowedError') {
     return new Error('Cancelled, or the key was not touched in time. Try again.');
@@ -1091,68 +1091,8 @@ function writeBlob(credId, bytes) {
     var ext = assertion && assertion.getClientExtensionResults();
     var lb = ext && ext.largeBlob;
     if (lb && lb.written === true) return true;
-
-    // `written` is not trustworthy on its own — Chrome's DevTools virtual
-    // authenticator stores the blob and still reports false. Ask the key what
-    // it actually holds rather than believing the flag. This costs an extra PIN
-    // and touch, but only on the path that would otherwise have failed.
-    return confirmBlob(credId, bytes).then(function (check) {
-      if (check.ok) return true;
-      var got = lb ? 'written=' + JSON.stringify(lb.written)
-        : 'no largeBlob result (' + JSON.stringify(ext) + ')';
-      throw Object.assign(new Error('The key did not store the share — the write reported ' + got
-        + ', and reading it back ' + check.why + '.'), { notWritten: true });
-    });
-  });
-}
-
-/* Read the blob back off one specific credential and compare it byte for byte
-   with what we meant to store. Reading a known credential id is safe here — it
-   is the empty-allowCredentials discoverable read that must never precede a
-   write, and this happens afterwards.
-
-   Returns { ok, why }. `why` is reported to the user verbatim: swallowing the
-   reason here turns every distinct cause into the same dead end. */
-function confirmBlob(credId, expected) {
-  return navigator.credentials.get({
-    publicKey: {
-      challenge: challenge(),
-      rpId: rpId(),
-      allowCredentials: [{ type: 'public-key', id: credId }],
-      userVerification: 'required',
-      timeout: 120000,
-      extensions: { largeBlob: { read: true } }
-    }
-  }).then(function (assertion) {
-    var ext = assertion && assertion.getClientExtensionResults();
-    var lb = ext && ext.largeBlob;
-    if (!lb) {
-      return {
-        ok: false, why: 'returned no largeBlob result at all — this browser or key may not '
-          + 'support reading blobs back'
-      };
-    }
-    if (!lb.blob) {
-      return { ok: false, why: 'found the credential but no blob on it' };
-    }
-    var got = new Uint8Array(lb.blob);
-    if (got.length !== expected.length) {
-      return {
-        ok: false, why: 'found a blob of ' + got.length + ' bytes where '
-          + expected.length + ' were written'
-      };
-    }
-    for (var i = 0; i < got.length; i++) {
-      if (got[i] !== expected[i]) {
-        return { ok: false, why: 'found a blob that differs from what was written, at byte ' + i };
-      }
-    }
-    return { ok: true, why: '' };
-  }, function (e) {
-    return {
-      ok: false, why: 'failed with ' + (e && e.name ? e.name : 'an unknown error')
-        + (e && e.message ? ' (' + e.message + ')' : '')
-    };
+    throw Object.assign(new Error('The key did not store the share. The credential it left behind '
+      + 'is unused.'), { notWritten: true });
   });
 }
 
@@ -1244,9 +1184,6 @@ function envReport() {
   }
   parts.push('Keys enrolled here are tied to <b><code>' + esc(host) + '</code></b> and can only be '
     + 'read back at this same URL.');
-  if (!isLoopbackHost(host)) {
-    parts.push('If this domain ever lapses, they are lost. Running it locally avoids that.');
-  }
   return { ok: true, html: parts.join(' ') };
 }
 
@@ -1267,16 +1204,14 @@ var state = {
   n: 5, m: 3, shares: [],
 
   // writing shares onto keys
-  written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1,
-  // Set when create() refuses a key that already holds a share from this
-  // backup, so the address for deleting it can be offered.
-  occupiedKey: false, urlCopied: false,
+  written: [], keyLabel: '', busy: false, writeErr: '',
+  urlCopied: false,
 
   // read-back gate
   vRecords: [], verifyMsg: '', verifyOk: null,
 
   // restore
-  rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
+  rRecords: [], readErr: '',
   rSeed: '', rFp: '', rKind: '', rAlt: '', rHasPass: false,
   reveal: false, seedCopied: false,
 
@@ -1649,23 +1584,16 @@ function renderSeed() {
     setVal($('input', el), state.words[i] || '');
   });
   setVal($('#input-pass'), state.inputPass);
-  show($('#decrypt-pass-wrap'), isSlip39());
+  show($('#decrypt-pass-wrap'), isSlip39() && state.hasPass === true);
   $('#pass-no').classList.toggle('is-on', state.hasPass === false);
   $('#pass-yes').classList.toggle('is-on', state.hasPass === true);
-  setText($('#pass-help'), state.hasPass === null
-    ? 'Answer this so a restore can tell you whether the recovered words are enough on their own.'
-    : state.hasPass
-      ? 'Recorded on every key. The passphrase itself is never asked for or stored — that is what '
-      + 'keeps it a second factor, and it is the one thing no number of keys can recover. The '
-      + 'fingerprint below is the wallet without it, so it will not match what your wallet shows.'
-      : 'The words alone will open this wallet, and the fingerprint below identifies it.');
   // Answering is required: a restore has no way to work it out later.
   $('#seed-next').disabled = !state.secret || state.hasPass === null;
+  setText($('#seed-fp-label'), state.hasPass
+    ? 'Wallet fingerprint before passphrase' : 'Wallet fingerprint');
   setText($('#seed-fp'), state.seedFp);
   show($('#seed-fp-wrap'), !!state.seedFp);
-  show($('#seed-blocked'), !allWordsIn() || state.hasPass === null);
-  setText($('#seed-blocked'), !allWordsIn() ? 'Fill in every word to continue'
-    : 'Answer the passphrase question to continue');
+  show($('#seed-blocked'), allWordsIn() && state.hasPass === null);
   setText($('#seed-err'), state.seedErr);
   show($('#seed-err'), !!state.seedErr);
 }
@@ -1692,9 +1620,9 @@ function renderSplit() {
       + (state.m - 1) + ' reveal nothing at all.';
   }
   setText($('#split-sentence'), sentence);
-  setText($('#split-note'), 'You will need ' + state.n + ' YubiKeys, one per share, each on '
-    + 'firmware 5.7 or newer. A key cannot be cloned, so losing more than '
-    + (state.n - state.m) + ' of them loses the backup. Have them all to hand before you start.');
+  setText($('#split-note'), 'You will need ' + state.n + ' YubiKeys, one per share. A key cannot '
+    + 'be cloned, so losing more than ' + (state.n - state.m) + ' of them loses the backup. Have '
+    + 'them all to hand before you start.');
   setText($('#split-next'), state.busy ? 'Splitting…' : 'Split into ' + state.n + ' shares');
   $('#split-next').disabled = state.busy;
 }
@@ -1723,31 +1651,25 @@ function renderWrite() {
     show($('.row-body', el), active);
     show($('.row-done', el), !!done);
     if (active) {
-      var occupied = state.occupiedKey;
+      var failed = !!state.writeErr;
       setVal($('.f-label', el), state.keyLabel);
       $('.f-label', el).disabled = resuming;
       $('.f-write', el).disabled = state.busy;
-      show($('.f-addr', el), occupied && !state.busy);
+      show($('.f-addr', el), failed && !state.busy);
       setText($('.f-addr-url', el), KEYS_SETTINGS_URL);
       setText($('.f-addr-done', el), state.urlCopied ? 'Copied' : '');
-      // The credentials live under "Sign-in data" on that page, which is not
-      // obvious — the page opens on PIN and fingerprint options.
-      setText($('.f-err-tail', el), occupied ? 'under Sign-in data.' : '');
+      setText($('.f-addr-lead', el), failed ? 'Check your key at' : '');
       show($('.spinner', el), state.busy);
       setText($('.f-write-text', el), state.busy ? 'Follow the prompts…'
         : resuming ? 'Try storing the share again' : 'Write the share to this key');
       setText($('.f-hint', el), state.busy ? 'PIN and touch'
-        // Nothing here when occupied: the error and the address line below say
-        // it, and a hint above the error explains a problem before stating it.
-        : occupied ? ''
+        : failed ? ''
           : resuming ? 'This key is already set up — this press only stores the share on it'
             : 'Share ' + (i + 1) + ' of ' + state.n);
       setText($('.f-err', el), state.writeErr);
     }
     if (done) {
-      setText($('.f-stored', el), state.revealed === i ? state.shares[i]
-        : 'Stored on the key. The words are hidden — the key is meant to be the only copy.');
-      setText($('.f-reveal', el), state.revealed === i ? 'Hide words' : 'Show words');
+      setText($('.f-stored', el), 'Stored on the key.');
     }
   });
   show($('#to-verify-wrap'), state.written.length === state.n);
@@ -1755,8 +1677,8 @@ function renderWrite() {
 
 function renderVerify() {
   setText($('#verify-sub'), 'Unplug each key, plug it back in, and read the share off it. This '
-    + 'proves the write worked while you can still redo it — there is no paper copy to fall back '
-    + 'on. ' + state.m + ' of the ' + state.n + ' keys are needed.');
+    + 'proves the write worked while you can still redo it. ' + state.m + ' of the ' + state.n
+    + ' keys are needed.');
   syncList($('#verify-rows'), 'tpl-read-row', state.vRecords.length, function (el, i) {
     var r = state.vRecords[i];
     setText($('.row-title', el), 'Share ' + (r.i + 1) + ' of ' + r.n);
@@ -1774,12 +1696,9 @@ function renderVerify() {
 
 function renderDone() {
   setText($('#done-badge'), 'Verified — ' + state.m + ' keys rebuilt your seed');
+  setText($('#done-fp-label'), state.hasPass
+    ? 'Wallet fingerprint before passphrase' : 'Wallet fingerprint');
   setText($('#done-fp'), state.seedFp);
-  setText($('#recovery-note'), 'To restore: open this tool at ' + rpId() + ', choose Restore, and '
-    + 'read any ' + state.m + ' of the ' + state.n + ' keys. Shares are bound to that address and '
-    + 'cannot be read anywhere else. If this tool is ever gone, python-fido2 can read the blob off '
-    + 'a key given its PIN. Record the address, the ' + state.m + '-of-' + state.n + ' threshold, '
-    + 'the fingerprint above, and your PIN.');
   syncList($('#done-grid'), 'tpl-done-card', state.written.length, function (el, i) {
     setText($('.done-num', el), '#' + (i + 1));
     setText($('.done-label', el), state.written[i].label);
@@ -1799,31 +1718,20 @@ function renderCollect() {
     : 'Read a YubiKey' + (left > 0 ? ' (' + left + ' to go)' : ''));
   show($('#read-spin'), state.busy);
   $('#read-btn').disabled = state.busy;
-  setText($('#collect-hint'), need === null
-    ? 'The threshold is stored with the first share you read.'
+  setText($('#collect-hint'), need === null ? ''
     : 'This backup needs ' + need + ' of ' + state.rRecords[0].n + ' keys.');
   setText($('#read-err'), state.readErr);
   show($('#read-err'), !!state.readErr);
 
-  show($('#paste-wrap'), state.pasteMode);
-  if (state.pasteMode) {
-    syncList($('#paste-rows'), 'tpl-paste-row', state.pasted.length, function (el, i) {
-      var t = (state.pasted[i] || '').trim();
-      var n = t ? t.split(/\s+/).length : 0;
-      var ok = n === 20 || n === 33;
-      el.classList.toggle('is-bad', !!t && !ok);
-      setText($('.crow-head span:first-child', el), 'Share ' + (i + 1));
-      var hint = $('.hint', el);
-      setText(hint, !t ? '' : ok ? n + ' words' : n + ' words — expected 20 or 33');
-      hint.className = 'hint ' + (ok ? 'ok' : 'err');
-      setVal($('textarea', el), state.pasted[i] || '');
-    });
-  }
 }
 
 function renderRestored() {
   var words = state.rSeed ? state.rSeed.split(' ') : [];
   setText($('#restored-kind'), state.rKind);
+  setText($('#restored-passphrase'), state.rHasPass
+    ? 'has passphrase' : 'no passphrase');
+  setText($('#restored-fp-label'), state.rHasPass
+    ? 'wallet fingerprint before passphrase' : 'wallet fingerprint');
   setText($('#restored-fp'), state.rFp);
   var grid = $('#words-out');
   grid.classList.toggle('cols-4', words.length > 12);
@@ -1885,7 +1793,8 @@ var DEMO = {
 };
 
 function setCount(n) {
-  setState({ count: n, words: fill(n, ''), secret: null, seedFp: '', seedErr: '' });
+  setState({ count: n, words: fill(n, ''), inputPass: '',
+    secret: null, seedFp: '', seedErr: '' });
 }
 
 function doSplit() {
@@ -1895,8 +1804,7 @@ function doSplit() {
   // restorable on a Trezor, which never asks for one.
   generateShares(state.secret, state.m, state.n, '').then(function (shares) {
     setState({
-      shares: shares, written: [], busy: false, step: 2, keyLabel: '',
-      revealed: -1, occupiedKey: false
+      shares: shares, written: [], busy: false, step: 2, keyLabel: ''
     });
   }).catch(function (e) {
     setState({ busy: false, seedErr: e.message });
@@ -1921,14 +1829,13 @@ function doWrite() {
   }).then(function () {
     setState({
       written: state.written.concat([{ label: label }]),
-      busy: false, keyLabel: '', occupiedKey: false
+      busy: false, keyLabel: ''
     });
   }).catch(function (e) {
     // InvalidStateError means the authenticator refused because this key already
     // holds a credential from this backup — the one duplicate check that works
     // without reading the key first.
-    var dup = e && /already holds a share/.test(e.message);
-    setState({ busy: false, writeErr: e.message, occupiedKey: dup });
+    setState({ busy: false, writeErr: e.message });
   });
 }
 
@@ -2045,26 +1952,16 @@ function doRestoreRead() {
   });
 }
 
-function doPasteCombine() {
-  var list = state.pasted.map(function (t) { return (t || '').trim(); }).filter(Boolean);
-  if (!list.length) return;
-  setState({ busy: true, readErr: '' });
-  // No record, so no origin and nothing to verify against.
-  finishRestore(list, null, '', false).catch(function (e) {
-    setState({ busy: false, readErr: e.message });
-  });
-}
-
 function wipe() {
   enrolledIds = [];
   pendingCred = null;
   setState({
     view: 'home', step: 0, count: 12, words: fill(12, ''), inputPass: '',
     secret: null, seedFp: '', seedErr: '', hasPass: null, n: 5, m: 3, shares: [],
-    written: [], keyLabel: '', busy: false, writeErr: '', revealed: -1,
-    occupiedKey: false, urlCopied: false,
+    written: [], keyLabel: '', busy: false, writeErr: '',
+    urlCopied: false,
     vRecords: [], verifyMsg: '', verifyOk: null,
-    rRecords: [], readErr: '', pasteMode: false, pasted: ['', '', ''],
+    rRecords: [], readErr: '',
     rSeed: '', rFp: '', rKind: '', rAlt: '', rHasPass: false,
     reveal: false, seedCopied: false
   });
@@ -2080,7 +1977,10 @@ var CLICKS = {
   count12: function () { setCount(12); },
   count20: function () { setCount(20); },
   count24: function () { setCount(24); },
-  'pass-no': function () { setState({ hasPass: false }); },
+  'pass-no': function () {
+    setState({ hasPass: false, inputPass: '' });
+    refreshSeed();
+  },
   'pass-yes': function () { setState({ hasPass: true }); },
   demo: function () {
     setState({ words: DEMO[state.count].split(' '), hasPass: false });
@@ -2097,15 +1997,11 @@ var CLICKS = {
     });
   },
   'write-key': doWrite,
-  'reveal-share': function (i) { setState({ revealed: state.revealed === i ? -1 : i }); },
   'to-verify': function () {
     setState({ step: 3, vRecords: [], verifyMsg: '', verifyOk: null });
   },
   'verify-read': doVerifyRead,
   'read-key': doRestoreRead,
-  'toggle-paste': function () { setState({ pasteMode: !state.pasteMode }); },
-  'paste-more': function () { setState({ pasted: state.pasted.concat(['']) }); },
-  'paste-combine': doPasteCombine,
   wipe: wipe,
   reveal: function () { setState({ reveal: !state.reveal }); },
   'copy-seed': function () {
@@ -2130,11 +2026,6 @@ var INPUTS = {
   },
   m: function (i, v) { setState({ m: Math.min(+v, state.n) }); },
   keylabel: function (i, v) { setState({ keyLabel: v }); },
-  pasteshare: function (i, v) {
-    var p = state.pasted.slice();
-    p[i] = v;
-    setState({ pasted: p, readErr: '' });
-  }
 };
 
 /* ============================================================
