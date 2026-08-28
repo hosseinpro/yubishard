@@ -88,7 +88,7 @@ This applies to new code and to code you are editing.
 DOM rather than returning anything; it dispatches to one `renderX()` per panel.
 
 **Style state lives in CSS, not JS.** Status colors are modifier classes (`.step.is-done`,
-`.row.is-active`, `.status.ok`, `.chip.is-on`, `.viz.is-needed`, `.hint.err`, `.words-out.is-hidden`,
+`.row.is-active`, `.status.ok`, `.chip.is-on`, `.viz.is-needed`, `.result.err`, `.words-out.is-hidden`,
 `.env-note.is-blocked`). Do not compute color strings in JS and interpolate them into `style`
 attributes — that was the previous design and it is what made the file unreadable.
 
