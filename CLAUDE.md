@@ -159,6 +159,12 @@ render, so an `aria-live` on it would re-announce the origin warning on every ke
 lines that *are* live (`#seed-err`, `#read-err`, `.f-err`, `#verify-msg`) all go through `setText()`,
 which writes only on change.
 
+**A button that can be busy is one shape.** `.btn` containing `.spinner[hidden]` + `.btn-label` —
+the verify and collect buttons and the write-row button all use it. The two read buttons are driven
+by `renderReadButton()`; the write button has its own text logic in `renderWrite()` but shares the
+classes. A new busy-capable button should reuse this shape, not mint fresh ids for its spinner and
+label.
+
 **The `chrome://` address is text with a copy button, never a link.** Chrome blocks a page from
 navigating to a `chrome://` URL, so a link there is dead on arrival. `.addr-inline` sits inline so it
 reads as the end of the sentence above it.

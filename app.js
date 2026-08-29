@@ -1665,7 +1665,7 @@ function renderWrite() {
       setText($('.f-addr-done', el), state.urlCopied ? 'Copied' : '');
       setText($('.f-addr-lead', el), failed ? 'Check your key at' : '');
       show($('.spinner', el), state.busy);
-      setText($('.f-write-text', el), state.busy ? 'Follow the prompts…'
+      setText($('.btn-label', el), state.busy ? 'Follow the prompts…'
         : resuming ? 'Try storing the share again' : 'Write the share to this key');
       setText($('.f-hint', el), state.busy ? 'PIN and touch'
         : failed ? ''
@@ -1680,6 +1680,13 @@ function renderWrite() {
   show($('#to-verify-wrap'), state.written.length === state.n);
 }
 
+function renderReadButton(btn, left) {
+  setText($('.btn-label', btn), state.busy ? 'Follow the prompts…'
+    : 'Read a YubiKey' + (left > 0 ? ' (' + left + ' to go)' : ''));
+  show($('.spinner', btn), state.busy);
+  btn.disabled = state.busy;
+}
+
 function renderVerify() {
   setText($('#verify-sub'), 'Unplug each key, plug it back in, and read the share off it. This '
     + 'proves the write worked while you can still redo it. ' + state.m + ' of the ' + state.n
@@ -1689,11 +1696,7 @@ function renderVerify() {
     setText($('.row-title', el), 'Share ' + (r.i + 1) + ' of ' + r.n);
     setText($('.row-sub', el), r.label);
   });
-  var left = state.m - state.vRecords.length;
-  setText($('#verify-btn-text'), state.busy ? 'Follow the prompts…'
-    : 'Read a YubiKey' + (left > 0 ? ' (' + left + ' to go)' : ''));
-  show($('#verify-spin'), state.busy);
-  $('#verify-btn').disabled = state.busy;
+  renderReadButton($('#verify-btn'), state.m - state.vRecords.length);
   var msg = $('#verify-msg');
   setText(msg, state.verifyMsg);
   msg.className = 'result ' + (state.verifyOk ? 'ok' : 'err');
@@ -1718,11 +1721,7 @@ function renderCollect() {
     setText($('.row-sub', el), r.label);
   });
   var need = state.rRecords.length ? state.rRecords[0].m : null;
-  var left = need === null ? null : need - state.rRecords.length;
-  setText($('#read-btn-text'), state.busy ? 'Follow the prompts…'
-    : 'Read a YubiKey' + (left > 0 ? ' (' + left + ' to go)' : ''));
-  show($('#read-spin'), state.busy);
-  $('#read-btn').disabled = state.busy;
+  renderReadButton($('#read-btn'), need === null ? 0 : need - state.rRecords.length);
   setText($('#collect-hint'), need === null ? ''
     : 'This backup needs ' + need + ' of ' + state.rRecords[0].n + ' keys.');
   setText($('#read-err'), state.readErr);

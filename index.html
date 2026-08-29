@@ -104,7 +104,7 @@
         <ol class="stepper" id="stepper"></ol>
       </nav>
 
-      <section class="stage">
+      <div class="stage">
 
         <section class="panel" id="p-seed" hidden>
           <h2 class="title">Enter your recovery phrase</h2>
@@ -181,8 +181,8 @@
           <ul class="rows" id="verify-rows"></ul>
           <div class="actions">
             <button class="btn btn-primary" type="button" id="verify-btn" data-act="verify-read">
-              <span class="spinner" id="verify-spin" hidden></span>
-              <span id="verify-btn-text">Read a YubiKey</span>
+              <span class="spinner" hidden></span>
+              <span class="btn-label">Read a YubiKey</span>
             </button>
             <span class="result" id="verify-msg" role="status"></span>
           </div>
@@ -206,8 +206,8 @@
           <ul class="rows" id="collect-rows"></ul>
           <div class="actions">
             <button class="btn btn-primary" type="button" id="read-btn" data-act="read-key">
-              <span class="spinner" id="read-spin" hidden></span>
-              <span id="read-btn-text">Read a YubiKey</span>
+              <span class="spinner" hidden></span>
+              <span class="btn-label">Read a YubiKey</span>
             </button>
             <span class="note" id="collect-hint"></span>
           </div>
@@ -234,7 +234,7 @@
           </div>
         </section>
 
-      </section>
+      </div>
     </main>
 
     <footer class="foot">
@@ -283,7 +283,7 @@
         </div>
         <div class="actions">
           <button class="btn btn-primary btn-mid f-write" type="button" data-act="write-key">
-            <span class="spinner" hidden></span><span class="f-write-text"></span>
+            <span class="spinner" hidden></span><span class="btn-label"></span>
           </button>
           <span class="note f-hint"></span>
         </div>
