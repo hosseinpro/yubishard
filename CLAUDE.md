@@ -52,17 +52,16 @@ Chrome ships.
 
 ## Verification
 
-There is no test suite in the repo; the checks are reproducible from the official vectors.
-
-**Crypto layer** — the fastest loop is Node, which exposes the same WebCrypto API as the browser.
-Concatenate the wordlists, the crypto core and a test file, then run it. The crypto core is
-everything above `const RECORD_VERSION` in `app.js` — the first line that touches a browser-only
-API — so the cut can be made mechanically. All 45 vectors from
-`trezor/python-shamir-mnemonic/vectors.json` must pass, along with RIPEMD-160, BIP-32 test vectors 1
-and 2, and the BIP-39 English vectors. Node is a development convenience only — it is not a runtime
-dependency, and the shipped tool never needs it. The code uses `Uint8Array.prototype.toHex` and
-`Uint8Array.fromHex`, so the Node doing this needs them too (v26 has them; older Nodes need a
-two-line polyfill in the test file, never in `app.js`).
+**Crypto layer** — `node test/run.mjs` is the test suite, and CI runs it on every push
+(`.github/workflows/test.yml`). It works because Node exposes the same WebCrypto API as the
+browser: the harness cuts `app.js` at `const RECORD_VERSION` — the first line that touches a
+browser-only API, so the crypto core above it can be extracted mechanically — and runs all 45
+vectors from `trezor/python-shamir-mnemonic/vectors.json` (committed as
+`test/vectors-slip39.json`), RIPEMD-160, BIP-32 test vectors 1 and 2, the BIP-39 English vectors
+(`test/vectors-bip39.json`), and split/recover round-trips. All of them must pass. Node is a
+development convenience only — it is not a runtime dependency, and the shipped tool never needs
+it. The code uses `Uint8Array.prototype.toHex` and `Uint8Array.fromHex`; the harness carries a
+guarded polyfill for older Nodes — the polyfill stays in the test file, never in `app.js`.
 
 **Cross-tool** — generate shares here and have Trezor's `shamir-mnemonic` Python package combine
 them. This checks the encoder against an independent decoder, which the vectors alone do not.

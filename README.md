@@ -1,5 +1,7 @@
 # yubishard
 
+[![tests](https://github.com/hosseinpro/yubishard/actions/workflows/test.yml/badge.svg)](https://github.com/hosseinpro/yubishard/actions/workflows/test.yml)
+
 Split a wallet recovery phrase into standard **SLIP-39** shares and store each one on a different
 YubiKey. Any threshold of the keys rebuilds the phrase; fewer reveal nothing at all.
 
@@ -266,8 +268,9 @@ or the domain), so record that along with the threshold, the fingerprint and the
 ## Development
 
 Three hand-written files — `index.html`, `styles.css` and `app.js` — with no dependencies and no
-build step. Nothing bundles or transforms them, so what ships is what you edit. See
-`CLAUDE.md` for the internals and how to run the SLIP-39 test vectors.
+build step. Nothing bundles or transforms them, so what ships is what you edit. `node test/run.mjs`
+checks the crypto against the official SLIP-39, BIP-39, BIP-32 and RIPEMD-160 vectors — CI runs it
+on every push. See `CLAUDE.md` for the internals.
 
 All hashing — SHA-256, SHA-512, HMAC, PBKDF2 — comes from the browser's own `crypto.subtle`. Four
 primitives are implemented by hand because Chrome has no native for them:
@@ -283,7 +286,7 @@ The first two exist only to compute the BIP-32 fingerprint. The last two are the
 
 ## Todo
 
-- [ ] Commit the SLIP-39 vector test harness and run it in CI, with the badge in this README —
+- [x] Commit the SLIP-39 vector test harness and run it in CI, with the badge in this README —
       "validated against all 45 official vectors" should be verifiable, not claimed.
 - [ ] Add a `SECURITY.md` with a vulnerability reporting route.
 - [ ] Record a demo GIF of a backup and put it at the top of this README.

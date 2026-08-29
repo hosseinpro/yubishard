@@ -1,0 +1,14 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  vectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node test/run.mjs
