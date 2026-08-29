@@ -339,6 +339,7 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 .actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 22px; }
 
 .note { font-size: 13px; color: var(--dim); }
+.note.err { color: var(--danger); }
 
 .mono { font-family: var(--mono); font-weight: 600; color: var(--text); }
 
