@@ -1605,6 +1605,15 @@ async function doVerifyRead() {
   setState({ busy: true, verifyMsg: '', verifyOk: null });
   try {
     const rec = await readShareFromKey();
+    const expect = state.written[rec.i];
+    if (!expect || rec.share !== state.shares[rec.i] || rec.label !== expect.label
+      || rec.n !== state.n || rec.m !== state.m || rec.fp !== state.seedFp
+      || rec.of !== originKind() || rec.hasPass !== !!state.hasPass) {
+      throw new Error('This key returned a share'
+        + (rec.label ? ` labeled "${rec.label}"` : '')
+        + ' that is not from this backup — likely an older one still on the key. In the '
+        + 'account picker, choose the credential written in this session.');
+    }
     if (state.vRecords.some(r => r.i === rec.i)) {
       throw new Error('That key has already been read — try a different one.');
     }
