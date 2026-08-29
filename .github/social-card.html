@@ -1,0 +1,137 @@
+<!doctype html>
+<!-- Source for social-card.png. Re-render after editing:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+       --screenshot=.github/social-card.png --window-size=1280,640 --hide-scrollbars \
+       file://$PWD/.github/social-card.html -->
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #0d0f12;
+    --panel: #15181d;
+    --panel2: #1b1f25;
+    --text: #e9ebee;
+    --dim: #949ba6;
+    --line: rgba(255, 255, 255, .12);
+    --accent: oklch(0.68 0.14 253);
+    --ok: oklch(0.72 0.13 155);
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+
+  body {
+    width: 1280px; height: 640px; overflow: hidden;
+    background:
+      radial-gradient(900px 500px at 88% 10%, oklch(0.68 0.14 253 / .13), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Helvetica Neue", Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: grid; grid-template-columns: 1fr 430px; gap: 56px;
+    align-items: center;
+    padding: 76px 80px;
+  }
+
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+  .mark {
+    width: 46px; height: 46px; border-radius: 12px;
+    background: var(--accent); color: #0d0f12;
+    display: grid; place-items: center;
+    font-size: 20px; font-weight: 800; letter-spacing: -.5px;
+  }
+  .name { font-size: 27px; font-weight: 700; letter-spacing: -.2px; }
+
+  h1 {
+    font-size: 63px; line-height: 1.06; letter-spacing: -2.2px; font-weight: 700;
+    margin-bottom: 26px;
+  }
+  h1 b { color: var(--accent); font-weight: 700; }
+
+  p { font-size: 25px; line-height: 1.45; color: var(--dim); max-width: 21em; }
+
+  .foot { display: flex; align-items: center; gap: 12px; margin-top: 38px; font-size: 19px; }
+  .pill {
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 8px 17px; color: var(--dim);
+  }
+  .pill.on { border-color: oklch(0.72 0.13 155 / .45); color: var(--ok); }
+
+  .viz { display: flex; flex-direction: column; align-items: center; }
+
+  .seed {
+    width: 100%; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; padding: 20px 22px;
+  }
+  .seed span { font-size: 16px; color: var(--dim); }
+  .ticks { display: flex; gap: 7px; margin-top: 13px; }
+  .ticks i { height: 8px; flex: 1; border-radius: 3px; background: rgba(255, 255, 255, .22); }
+
+  .stem { width: 2px; height: 26px; background: var(--line); }
+
+  .split {
+    border: 1px solid oklch(0.68 0.14 253 / .5); color: var(--accent);
+    background: oklch(0.68 0.14 253 / .1);
+    border-radius: 999px; padding: 7px 18px; font-size: 17px; font-weight: 600;
+  }
+
+  .rail { position: relative; width: 100%; height: 24px; }
+  .rail::before {
+    content: ""; position: absolute; top: 0; left: 16.6%; right: 16.6%;
+    height: 2px; background: var(--line);
+  }
+  .rail i {
+    position: absolute; top: 0; width: 2px; height: 24px; background: var(--line);
+  }
+  .rail i:nth-child(1) { left: 16.6%; }
+  .rail i:nth-child(2) { left: 50%; }
+  .rail i:nth-child(3) { left: 83.4%; }
+
+  .keys { display: flex; gap: 14px; width: 100%; }
+  .key {
+    flex: 1; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 14px; padding: 15px 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 9px;
+  }
+  .key u {
+    width: 21px; height: 34px; border-radius: 6px;
+    background: linear-gradient(180deg, #3a4150, #2a2f38);
+    border: 1px solid rgba(255, 255, 255, .16);
+    position: relative;
+  }
+  .key u::after {
+    content: ""; position: absolute; inset: auto 6px 6px; height: 4px;
+    border-radius: 2px; background: var(--accent);
+  }
+  .key em { font-style: normal; font-size: 14px; color: var(--dim); }
+  .key s { text-decoration: none; font-size: 11px; color: rgba(233, 235, 238, .34); letter-spacing: .3px; }
+</style>
+
+<div>
+  <div class="brand">
+    <span class="mark">YS</span>
+    <span class="name">YubiShard</span>
+  </div>
+  <h1>Split a wallet seed<br>across <b>YubiKeys</b></h1>
+  <p>Standard SLIP-39 shares, one per key. A threshold rebuilds your recovery phrase — fewer
+    reveal nothing at all.</p>
+  <div class="foot">
+    <span class="pill on">Open source</span>
+    <span class="pill">Runs offline</span>
+    <span class="pill">No dependencies</span>
+  </div>
+</div>
+
+<div class="viz">
+  <div class="seed">
+    <span>Your recovery phrase</span>
+    <div class="ticks"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+  <div class="stem"></div>
+  <div class="split">split · 2 of 3</div>
+  <div class="stem" style="height:18px"></div>
+  <div class="rail"><i></i><i></i><i></i></div>
+  <div class="keys">
+    <div class="key"><u></u><em>Key 1</em><s>SHARE</s></div>
+    <div class="key"><u></u><em>Key 2</em><s>SHARE</s></div>
+    <div class="key"><u></u><em>Key 3</em><s>SHARE</s></div>
+  </div>
+</div>

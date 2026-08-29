@@ -1,5 +1,7 @@
 # yubishard
 
+![Split a wallet seed across YubiKeys — a recovery phrase splitting into three shares, one per key](.github/social-card.png)
+
 [![tests](https://github.com/hosseinpro/yubishard/actions/workflows/test.yml/badge.svg)](https://github.com/hosseinpro/yubishard/actions/workflows/test.yml)
 
 Split a wallet recovery phrase into standard **SLIP-39** shares and store each one on a different
