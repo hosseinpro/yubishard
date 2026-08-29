@@ -44,17 +44,25 @@ Then open `http://localhost:8000/`. Use the hostname `localhost`, never `127.0.0
 never a valid RP ID. The port is not part of the RP ID, so it can change freely.
 
 Chrome only. macOS or Windows 11. YubiKey firmware 5.7+ in practice — see the firmware note under
-WebAuthn largeBlob for why 5.5 is the wrong number to quote.
+WebAuthn largeBlob for why 5.5 is the wrong number to quote. The code assumes a current Chrome:
+`Uint8Array.prototype.toHex`/`Uint8Array.fromHex` (Chrome 140+) and `Response.prototype.bytes()`
+(Chrome 122+) are used bare, because anything old enough to lack them is also too old to trust with
+WebAuthn largeBlob. Do not reintroduce hand-rolled hex conversion or other polyfills for features
+Chrome ships.
 
 ## Verification
 
 There is no test suite in the repo; the checks are reproducible from the official vectors.
 
 **Crypto layer** — the fastest loop is Node, which exposes the same WebCrypto API as the browser.
-Concatenate the wordlists, the crypto core and a test file, then run it. All 45 vectors from
+Concatenate the wordlists, the crypto core and a test file, then run it. The crypto core is
+everything above `const RECORD_VERSION` in `app.js` — the first line that touches a browser-only
+API — so the cut can be made mechanically. All 45 vectors from
 `trezor/python-shamir-mnemonic/vectors.json` must pass, along with RIPEMD-160, BIP-32 test vectors 1
 and 2, and the BIP-39 English vectors. Node is a development convenience only — it is not a runtime
-dependency, and the shipped tool never needs it.
+dependency, and the shipped tool never needs it. The code uses `Uint8Array.prototype.toHex` and
+`Uint8Array.fromHex`, so the Node doing this needs them too (v26 has them; older Nodes need a
+two-line polyfill in the test file, never in `app.js`).
 
 **Cross-tool** — generate shares here and have Trezor's `shamir-mnemonic` Python package combine
 them. This checks the encoder against an independent decoder, which the vectors alone do not.
@@ -125,9 +133,16 @@ deliberate exception.
 matching map.
 
 **The crypto path is async, the render path is not.** WebCrypto returns promises, so results reach
-the DOM through `setState` in a `.then()`, never by awaiting inside `render()`. `refreshSeed()` guards
-against out-of-order results with a monotonic `seedToken` — an older keystroke's fingerprint must not
-overwrite a newer one's.
+the DOM through `setState` after an `await` in an async action function, never by awaiting inside
+`render()`. Every async action catches its own errors into state — an unhandled rejection is a bug.
+`refreshSeed()` guards against out-of-order results with a monotonic `seedToken` — an older
+keystroke's fingerprint must not overwrite a newer one's.
+
+**Validation must reject, never throw synchronously.** `combineMnemonics` and `bip39ToEntropy` are
+async precisely so that a bad word or checksum becomes a rejection. They once threw synchronously,
+which sailed past `refreshSeed()`'s `.catch` — an invalid phrase produced an uncaught exception and
+no visible error on the seed screen. Any new validation that a promise chain depends on goes inside
+an async function.
 
 **Two `.banner`-ish classes exist and they are different.** `.banner` is the pre-existing download
 strip above the header; `.env-warn` is the origin/environment notice. They were briefly the same
@@ -202,6 +217,9 @@ against Trezor's `shamir-mnemonic`.
   `((v % 255) + 255) % 255`.
 - Padding in a decoded share is `(valueWords * 10) % 16`, and those bits must be zero. Several
   official vectors exist purely to catch an implementation that skips this check.
+- WebCrypto's `importKey` rejects an empty HMAC key even though the abstract HMAC accepts one. It
+  never arises here — SLIP-39's digest share keys HMAC on 12+ random bytes — but it is the trap
+  waiting for anyone who generalises `hmac()`.
 
 ### The BIP-39 asymmetry
 
@@ -246,13 +264,23 @@ the fingerprint.
 - **Reuse `pendingCred` on retry, never call `create()` again.** Each registration burns a resident
   slot (25 before firmware 5.7, 100 after), and once a key holds several credentials for one origin
   Chrome shows an account picker on every read, which breaks the restore flow.
+- **`settle()` sits between the create and write ceremonies.** Chrome permits one WebAuthn request
+  at a time, and a finished one takes a moment to tear down. A human with a real key never notices,
+  but a DevTools virtual authenticator resolves instantly and the follow-up `get()` lands while the
+  `create()` is still closing — an intermittent failure that succeeds on retry. Do not remove the
+  delay because hardware testing looks fine without it.
+- **The credential's `user.name` carries the user's own label** — `YubiShard: <label>
+  (share-i-of-n)`. It is what Chrome's account picker and `ykman fido credentials list` display, and
+  a bare share number is no help to someone holding five keys.
 - **Always check `getClientExtensionResults().largeBlob.supported`** after create. A key without
   largeBlob otherwise looks like it worked.
-- **`written` is not trustworthy on its own.** Chrome's DevTools virtual authenticator stores the
-  blob and still reports `written: false`. Taking the flag at face value made a working write look
-  broken. So a `written !== true` result is not fatal on its own — `confirmBlob()` reads the blob
-  back off that credential and compares it byte for byte, and only a failed comparison is an error.
-  The extra ceremony only happens on the path that would have failed anyway.
+- **`written !== true` is treated as a failed write.** `writeBlob()` makes one attempt and throws a
+  `notWritten` error; the retry press reuses `pendingCred` rather than registering again, so a
+  failure costs no resident slot. Know one distortion when testing: Chrome's DevTools virtual
+  authenticator can store the blob and still report `written: false`, which once made a working
+  write look broken — a read-back-and-compare step (`confirmBlob`) was tried to absorb that and
+  later removed. On real hardware the flag is accurate; only conclude a write is broken from a real
+  key, never from the virtual authenticator.
 - **Firmware: quote 5.7+, not 5.5+.** The extension did arrive in 5.5, but 5.5.x and 5.6.x shipped
   only on the Bio Series — the mainline 5 Series (5 NFC, 5C NFC, 5 Nano) went 5.4.3 straight to 5.7,
   which reached retail 2024-05-21. So for the keys anyone actually buys for this, 5.7 is the floor

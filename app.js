@@ -1,7 +1,6 @@
 'use strict';
 
-/* SLIP-39 wordlist (1024) and BIP-39 English wordlist (2048). */
-var SLIP39_WORDS = (
+const SLIP39_WORDS = (
   'academic,acid,acne,acquire,acrobat,activity,actress,adapt,adequate,adjust,admit,adorn,' +
   'adult,advance,advocate,afraid,again,agency,agree,aide,aircraft,airline,airport,ajar,' +
   'alarm,album,alcohol,alien,alive,alpha,already,alto,aluminum,always,amazing,ambition,' +
@@ -90,7 +89,7 @@ var SLIP39_WORDS = (
   'yelp,yield,yoga,zero'
 ).split(',');
 
-var BIP39_WORDS = (
+const BIP39_WORDS = (
   'abandon,ability,able,about,above,absent,absorb,abstract,absurd,abuse,access,accident,' +
   'account,accuse,achieve,acid,acoustic,acquire,across,act,action,actor,actress,actual,' +
   'adapt,add,addict,address,adjust,admit,adult,advance,advice,aerobic,affair,afford,' +
@@ -264,106 +263,64 @@ var BIP39_WORDS = (
   'yellow,you,young,youth,zebra,zero,zone,zoo'
 ).split(',');
 
-/* ============================================================
-   Byte helpers
-   ============================================================ */
-
-function bytesToHex(b) {
-  var s = '', i;
-  for (i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
-  return s;
-}
-
-function hexToBytes(h) {
-  var out = new Uint8Array(h.length / 2), i;
-  for (i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
-  return out;
-}
-
-function concatBytes() {
-  var total = 0, i;
-  for (i = 0; i < arguments.length; i++) total += arguments[i].length;
-  var out = new Uint8Array(total), at = 0;
-  for (i = 0; i < arguments.length; i++) { out.set(arguments[i], at); at += arguments[i].length; }
+function concatBytes(...arrays) {
+  const out = new Uint8Array(arrays.reduce((n, a) => n + a.length, 0));
+  let at = 0;
+  for (const a of arrays) { out.set(a, at); at += a.length; }
   return out;
 }
 
 function xorBytes(a, b) {
-  var out = new Uint8Array(a.length), i;
-  for (i = 0; i < a.length; i++) out[i] = a[i] ^ b[i];
-  return out;
+  return Uint8Array.from(a, (v, i) => v ^ b[i]);
 }
 
 function randomBytes(n) {
   return crypto.getRandomValues(new Uint8Array(n));
 }
 
-var utf8 = new TextEncoder();
+const utf8 = new TextEncoder();
 
-/* ============================================================
-   WebCrypto wrappers
-
-   WebAuthn forces this tool onto localhost or https, both of which are
-   secure contexts, so crypto.subtle is always available. Only RIPEMD-160
-   and secp256k1 have to be written by hand — WebCrypto has neither.
-   ============================================================ */
-
-function subtle() { return crypto.subtle; }
-
-function sha256(data) {
-  return subtle().digest('SHA-256', data).then(function (b) { return new Uint8Array(b); });
+async function sha256(data) {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', data));
 }
 
-function hmac(hash, key, data) {
-  // An empty HMAC key is legal in the abstract but rejected by importKey, and
-  // it never arises here: SLIP-39 digests key on >= 12 random bytes.
-  return subtle().importKey('raw', key, { name: 'HMAC', hash: hash }, false, ['sign'])
-    .then(function (k) { return subtle().sign('HMAC', k, data); })
-    .then(function (b) { return new Uint8Array(b); });
+async function hmac(hash, key, data) {
+  const k = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', k, data));
 }
 
-function pbkdf2(hash, password, salt, iterations, dkLen) {
-  return subtle().importKey('raw', password, 'PBKDF2', false, ['deriveBits'])
-    .then(function (k) {
-      return subtle().deriveBits(
-        { name: 'PBKDF2', hash: hash, salt: salt, iterations: iterations }, k, dkLen * 8);
-    })
-    .then(function (b) { return new Uint8Array(b); });
+async function pbkdf2(hash, password, salt, iterations, dkLen) {
+  const k = await crypto.subtle.importKey('raw', password, 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash, salt, iterations }, k, dkLen * 8));
 }
 
-/* ============================================================
-   RIPEMD-160
-
-   Needed only for the BIP-32 fingerprint, which is HASH160 of the
-   master public key. WebCrypto does not implement it.
-   ============================================================ */
-
-var RMD_ZL = [
+const RMD_ZL = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
   7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8,
   3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12,
   1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2,
   4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13];
-var RMD_ZR = [
+const RMD_ZR = [
   5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12,
   6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2,
   15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13,
   8, 6, 4, 1, 3, 11, 15, 0, 5, 12, 2, 13, 9, 7, 10, 14,
   12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11];
-var RMD_SL = [
+const RMD_SL = [
   11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8,
   7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12,
   11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5,
   11, 12, 14, 15, 14, 15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12,
   9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6];
-var RMD_SR = [
+const RMD_SR = [
   8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6,
   9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11,
   9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5,
   15, 5, 8, 11, 14, 14, 6, 14, 6, 9, 12, 9, 12, 5, 15, 8,
   8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11];
-var RMD_KL = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
-var RMD_KR = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
+const RMD_KL = [0x00000000, 0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xa953fd4e];
+const RMD_KR = [0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000];
 
 function rmdF(j, x, y, z) {
   if (j < 16) return x ^ y ^ z;
@@ -376,23 +333,22 @@ function rmdF(j, x, y, z) {
 function rol(x, n) { return (x << n) | (x >>> (32 - n)); }
 
 function ripemd160(msg) {
-  var len = msg.length;
-  var padded = new Uint8Array(((len + 8) >> 6 << 6) + 64);
+  const len = msg.length;
+  const padded = new Uint8Array(((len + 8) >> 6 << 6) + 64);
   padded.set(msg);
   padded[len] = 0x80;
-  var bitLenLo = (len << 3) >>> 0, bitLenHi = Math.floor(len / 0x20000000);
-  var dv = new DataView(padded.buffer);
-  dv.setUint32(padded.length - 8, bitLenLo, true);
-  dv.setUint32(padded.length - 4, bitLenHi, true);
+  const dv = new DataView(padded.buffer);
+  dv.setUint32(padded.length - 8, (len << 3) >>> 0, true);
+  dv.setUint32(padded.length - 4, Math.floor(len / 0x20000000), true);
 
-  var h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
-  var x = new Int32Array(16), i, j, chunk;
+  const h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+  const x = new Int32Array(16);
 
-  for (chunk = 0; chunk < padded.length; chunk += 64) {
-    for (i = 0; i < 16; i++) x[i] = dv.getInt32(chunk + i * 4, true);
-    var al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
-    var ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4], t;
-    for (j = 0; j < 80; j++) {
+  for (let chunk = 0; chunk < padded.length; chunk += 64) {
+    for (let i = 0; i < 16; i++) x[i] = dv.getInt32(chunk + i * 4, true);
+    let al = h[0], bl = h[1], cl = h[2], dl = h[3], el = h[4];
+    let ar = h[0], br = h[1], cr = h[2], dr = h[3], er = h[4], t;
+    for (let j = 0; j < 80; j++) {
       t = rol((al + rmdF(j, bl, cl, dl) + x[RMD_ZL[j]] + RMD_KL[(j / 16) | 0]) | 0, RMD_SL[j]);
       t = (t + el) | 0;
       al = el; el = dl; dl = rol(cl, 10); cl = bl; bl = t;
@@ -408,27 +364,19 @@ function ripemd160(msg) {
     h[0] = t;
   }
 
-  var out = new Uint8Array(20), ov = new DataView(out.buffer);
-  for (i = 0; i < 5; i++) ov.setUint32(i * 4, h[i] >>> 0, true);
+  const out = new Uint8Array(20), ov = new DataView(out.buffer);
+  for (let i = 0; i < 5; i++) ov.setUint32(i * 4, h[i] >>> 0, true);
   return out;
 }
 
-/* ============================================================
-   secp256k1 — base point multiplication only
+const P256K = BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
+const GX = BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
+const GY = BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
 
-   Jacobian coordinates so the whole scalar multiply costs one modular
-   inverse at the end rather than one per bit.
-   ============================================================ */
-
-var P256K = BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
-var GX = BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
-var GY = BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
-
-function mod(a, m) { var r = a % m; return r < 0n ? r + m : r; }
+function mod(a, m) { const r = a % m; return r < 0n ? r + m : r; }
 
 function modInv(a, m) {
-  // Fermat: m is prime, so a^(m-2) is the inverse.
-  var result = 1n, base = mod(a, m), e = m - 2n;
+  let result = 1n, base = mod(a, m), e = m - 2n;
   while (e > 0n) {
     if (e & 1n) result = (result * base) % m;
     base = (base * base) % m;
@@ -438,137 +386,111 @@ function modInv(a, m) {
 }
 
 function jacDouble(pt) {
-  var X = pt[0], Y = pt[1], Z = pt[2];
+  const [X, Y, Z] = pt;
   if (Y === 0n) return [0n, 0n, 0n];
-  var A = (Y * Y) % P256K;
-  var B = mod(4n * X * A, P256K);
-  var C = mod(8n * A * A, P256K);
-  var D = mod(3n * X * X, P256K);
-  var X3 = mod(D * D - 2n * B, P256K);
-  var Y3 = mod(D * (B - X3) - C, P256K);
-  var Z3 = mod(2n * Y * Z, P256K);
+  const A = (Y * Y) % P256K;
+  const B = mod(4n * X * A, P256K);
+  const C = mod(8n * A * A, P256K);
+  const D = mod(3n * X * X, P256K);
+  const X3 = mod(D * D - 2n * B, P256K);
+  const Y3 = mod(D * (B - X3) - C, P256K);
+  const Z3 = mod(2n * Y * Z, P256K);
   return [X3, Y3, Z3];
 }
 
 function jacAdd(p, q) {
   if (p[2] === 0n) return q;
   if (q[2] === 0n) return p;
-  var Z12 = (p[2] * p[2]) % P256K, Z22 = (q[2] * q[2]) % P256K;
-  var U1 = (p[0] * Z22) % P256K, U2 = (q[0] * Z12) % P256K;
-  var S1 = mod(p[1] * Z22 * q[2], P256K), S2 = mod(q[1] * Z12 * p[2], P256K);
+  const Z12 = (p[2] * p[2]) % P256K, Z22 = (q[2] * q[2]) % P256K;
+  const U1 = (p[0] * Z22) % P256K, U2 = (q[0] * Z12) % P256K;
+  const S1 = mod(p[1] * Z22 * q[2], P256K), S2 = mod(q[1] * Z12 * p[2], P256K);
   if (U1 === U2) return S1 === S2 ? jacDouble(p) : [0n, 0n, 0n];
-  var H = mod(U2 - U1, P256K), R = mod(S2 - S1, P256K);
-  var H2 = (H * H) % P256K, H3 = (H2 * H) % P256K;
-  var X3 = mod(R * R - H3 - 2n * U1 * H2, P256K);
-  var Y3 = mod(R * (U1 * H2 - X3) - S1 * H3, P256K);
-  var Z3 = mod(H * p[2] * q[2], P256K);
+  const H = mod(U2 - U1, P256K), R = mod(S2 - S1, P256K);
+  const H2 = (H * H) % P256K, H3 = (H2 * H) % P256K;
+  const X3 = mod(R * R - H3 - 2n * U1 * H2, P256K);
+  const Y3 = mod(R * (U1 * H2 - X3) - S1 * H3, P256K);
+  const Z3 = mod(H * p[2] * q[2], P256K);
   return [X3, Y3, Z3];
 }
 
-// Compressed SEC encoding of k*G.
 function pubkeyCompressed(k) {
-  var acc = [0n, 0n, 0n], add = [GX, GY, 1n];
+  let acc = [0n, 0n, 0n], add = [GX, GY, 1n];
   while (k > 0n) {
     if (k & 1n) acc = jacAdd(acc, add);
     add = jacDouble(add);
     k >>= 1n;
   }
-  var zInv = modInv(acc[2], P256K), zInv2 = (zInv * zInv) % P256K;
-  var x = (acc[0] * zInv2) % P256K;
-  var y = mod(acc[1] * zInv2 % P256K * zInv, P256K);
-  var out = new Uint8Array(33);
+  const zInv = modInv(acc[2], P256K), zInv2 = (zInv * zInv) % P256K;
+  const x = (acc[0] * zInv2) % P256K;
+  const y = mod(acc[1] * zInv2 % P256K * zInv, P256K);
+  const out = new Uint8Array(33);
   out[0] = (y & 1n) ? 0x03 : 0x02;
-  var hex = x.toString(16).padStart(64, '0');
-  out.set(hexToBytes(hex), 1);
+  out.set(Uint8Array.fromHex(x.toString(16).padStart(64, '0')), 1);
   return out;
 }
 
-/* Master fingerprint: first 4 bytes of HASH160 of the master public key.
-   This is what lets a user tell, at a glance, whether a restore produced
-   the wallet they backed up. */
-function bip32Fingerprint(seed) {
-  return hmac('SHA-512', utf8.encode('Bitcoin seed'), seed).then(function (I) {
-    var k = BigInt('0x' + bytesToHex(I.subarray(0, 32)));
-    return sha256(pubkeyCompressed(k));
-  }).then(function (h) {
-    return bytesToHex(ripemd160(h).subarray(0, 4)).toUpperCase();
-  });
+async function bip32Fingerprint(seed) {
+  const I = await hmac('SHA-512', utf8.encode('Bitcoin seed'), seed);
+  const h = await sha256(pubkeyCompressed(BigInt('0x' + I.subarray(0, 32).toHex())));
+  return ripemd160(h).subarray(0, 4).toHex().toUpperCase();
 }
 
-/* ============================================================
-   GF(256)
-
-   The field is generated by 3 (multiply by x+1), reduced by
-   x^8 + x^4 + x^3 + x + 1, matching SLIP-39.
-   ============================================================ */
-
-var EXP = new Uint8Array(255), LOG = new Uint8Array(256);
-
-(function () {
-  var poly = 1;
-  for (var i = 0; i < 255; i++) {
+const EXP = new Uint8Array(255), LOG = new Uint8Array(256);
+{
+  let poly = 1;
+  for (let i = 0; i < 255; i++) {
     EXP[i] = poly;
     LOG[poly] = i;
     poly = (poly << 1) ^ poly;
     if (poly & 0x100) poly ^= 0x11b;
     poly &= 0xff;
   }
-})();
+}
 
-/* Lagrange interpolation of the shares at an arbitrary x. SLIP-39 needs
-   x = 255 for the secret and x = 254 for the digest, not just x = 0. */
 function interpolate(shares, x) {
-  var len = shares[0].y.length, i, j, k;
-  for (i = 0; i < shares.length; i++) {
-    if (shares[i].x === x) return new Uint8Array(shares[i].y);
+  const len = shares[0].y.length;
+  for (const s of shares) {
+    if (s.x === x) return new Uint8Array(s.y);
   }
-  var logProd = 0;
-  for (i = 0; i < shares.length; i++) logProd += LOG[x ^ shares[i].x];
+  let logProd = 0;
+  for (const s of shares) logProd += LOG[x ^ s.x];
 
-  var out = new Uint8Array(len);
-  for (i = 0; i < shares.length; i++) {
-    var sum = 0;
-    for (j = 0; j < shares.length; j++) sum += LOG[shares[i].x ^ shares[j].x];
-    // JS % keeps the sign of the dividend, so normalise into [0, 255).
-    var basis = (((logProd - LOG[x ^ shares[i].x] - sum) % 255) + 255) % 255;
-    for (k = 0; k < len; k++) {
-      var y = shares[i].y[k];
+  const out = new Uint8Array(len);
+  for (const s of shares) {
+    let sum = 0;
+    for (const t of shares) sum += LOG[s.x ^ t.x];
+    const basis = (((logProd - LOG[x ^ s.x] - sum) % 255) + 255) % 255;
+    for (let k = 0; k < len; k++) {
+      const y = s.y[k];
       if (y !== 0) out[k] ^= EXP[(LOG[y] + basis) % 255];
     }
   }
   return out;
 }
 
-/* ============================================================
-   RS1024 checksum
-   ============================================================ */
-
-var RS_GEN = [
+const RS_GEN = [
   0xe0e040, 0x1c1c080, 0x3838100, 0x7070200, 0xe0e0009,
   0x1c0c2412, 0x38086c24, 0x3090fc48, 0x21b1f890, 0x3f3f120];
 
-var CS_EXTENDABLE = 'shamir_extendable';
-var CS_NON_EXTENDABLE = 'shamir';
+const CS_EXTENDABLE = 'shamir_extendable';
+const CS_NON_EXTENDABLE = 'shamir';
 
 function customizationValues(ext) {
-  var s = ext ? CS_EXTENDABLE : CS_NON_EXTENDABLE, out = [], i;
-  for (i = 0; i < s.length; i++) out.push(s.charCodeAt(i));
-  return out;
+  return Array.from(ext ? CS_EXTENDABLE : CS_NON_EXTENDABLE, c => c.charCodeAt(0));
 }
 
 function rs1024Polymod(values) {
-  var chk = 1, i, j;
-  for (i = 0; i < values.length; i++) {
-    var b = chk >> 20;
-    chk = ((chk & 0xfffff) << 10) ^ values[i];
-    for (j = 0; j < 10; j++) if ((b >> j) & 1) chk ^= RS_GEN[j];
+  let chk = 1;
+  for (const v of values) {
+    const b = chk >> 20;
+    chk = ((chk & 0xfffff) << 10) ^ v;
+    for (let j = 0; j < 10; j++) if ((b >> j) & 1) chk ^= RS_GEN[j];
   }
   return chk;
 }
 
 function rs1024Checksum(data, ext) {
-  var values = customizationValues(ext).concat(data, [0, 0, 0]);
-  var polymod = rs1024Polymod(values) ^ 1;
+  const polymod = rs1024Polymod(customizationValues(ext).concat(data, [0, 0, 0])) ^ 1;
   return [(polymod >> 20) & 1023, (polymod >> 10) & 1023, polymod & 1023];
 }
 
@@ -576,28 +498,19 @@ function rs1024Verify(data, ext) {
   return rs1024Polymod(customizationValues(ext).concat(data)) === 1;
 }
 
-/* ============================================================
-   SLIP-39 mnemonic encoding
-
-   Bit layout: id 15 | ext 1 | e 4 | group index 4 | group threshold 4
-   | group count 4 | member index 4 | member threshold 4, then the share
-   value left-padded to a multiple of 10 bits, then 3 checksum words.
-   Thresholds and counts are stored one less than their value.
-   ============================================================ */
-
-var METADATA_WORDS = 7;   // 4 words of header + 3 of checksum
-var DIGEST_INDEX = 254;
-var SECRET_INDEX = 255;
-var DIGEST_BYTES = 4;
-var BASE_ITERATIONS = 10000;
-var ROUNDS = 4;
+const METADATA_WORDS = 7;
+const DIGEST_INDEX = 254;
+const SECRET_INDEX = 255;
+const DIGEST_BYTES = 4;
+const BASE_ITERATIONS = 10000;
+const ROUNDS = 4;
 
 function pushBits(bits, value, count) {
-  for (var i = count - 1; i >= 0; i--) bits.push((value >> i) & 1);
+  for (let i = count - 1; i >= 0; i--) bits.push((value >> i) & 1);
 }
 
 function encodeMnemonic(s) {
-  var bits = [], i;
+  const bits = [];
   pushBits(bits, s.id, 15);
   pushBits(bits, s.ext ? 1 : 0, 1);
   pushBits(bits, s.e, 4);
@@ -607,43 +520,41 @@ function encodeMnemonic(s) {
   pushBits(bits, s.memberIndex, 4);
   pushBits(bits, s.memberThreshold - 1, 4);
 
-  var valueBits = s.value.length * 8;
-  var valueWords = Math.ceil(valueBits / 10);
-  for (i = 0; i < valueWords * 10 - valueBits; i++) bits.push(0);
-  for (i = 0; i < s.value.length; i++) pushBits(bits, s.value[i], 8);
+  const valueBits = s.value.length * 8;
+  const valueWords = Math.ceil(valueBits / 10);
+  for (let i = 0; i < valueWords * 10 - valueBits; i++) bits.push(0);
+  for (const b of s.value) pushBits(bits, b, 8);
 
-  var idx = [];
-  for (i = 0; i < bits.length; i += 10) {
-    var w = 0;
-    for (var j = 0; j < 10; j++) w = (w << 1) | bits[i + j];
+  const idx = [];
+  for (let i = 0; i < bits.length; i += 10) {
+    let w = 0;
+    for (let j = 0; j < 10; j++) w = (w << 1) | bits[i + j];
     idx.push(w);
   }
-  idx = idx.concat(rs1024Checksum(idx, s.ext));
-  return idx.map(function (w) { return SLIP39_WORDS[w]; }).join(' ');
+  return idx.concat(rs1024Checksum(idx, s.ext)).map(w => SLIP39_WORDS[w]).join(' ');
 }
 
 function decodeMnemonic(mnemonic) {
-  var words = String(mnemonic).toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const words = String(mnemonic).toLowerCase().trim().split(/\s+/).filter(Boolean);
   if (words.length < 20) throw new Error('A share must be at least 20 words.');
 
-  var idx = words.map(function (w) {
-    var i = SLIP39_WORDS.indexOf(w);
-    if (i < 0) throw new Error('"' + w + '" is not a SLIP-39 word.');
+  const idx = words.map(w => {
+    const i = SLIP39_WORDS.indexOf(w);
+    if (i < 0) throw new Error(`"${w}" is not a SLIP-39 word.`);
     return i;
   });
 
-  // The extendable flag selects the checksum's customization string, so it has
-  // to be read before the checksum can be verified. The second word holds the
-  // low 5 bits of the id, then ext, then the 4-bit iteration exponent.
-  var ext = (idx[1] >> 4) & 1;
-  if (!rs1024Verify(idx, ext)) throw new Error('This share failed its checksum — check for a mistyped word.');
+  const ext = (idx[1] >> 4) & 1;
+  if (!rs1024Verify(idx, ext)) {
+    throw new Error('This share failed its checksum — check for a mistyped word.');
+  }
 
-  var bits = [], i, j;
-  for (i = 0; i < idx.length; i++) pushBits(bits, idx[i], 10);
-  var at = 0;
-  function take(n) { var v = 0; for (var k = 0; k < n; k++) v = (v << 1) | bits[at++]; return v; }
+  const bits = [];
+  for (const v of idx) pushBits(bits, v, 10);
+  let at = 0;
+  const take = n => { let v = 0; for (let k = 0; k < n; k++) v = (v << 1) | bits[at++]; return v; };
 
-  var out = {
+  const out = {
     id: take(15),
     ext: take(1) === 1,
     e: take(4),
@@ -657,30 +568,20 @@ function decodeMnemonic(mnemonic) {
     throw new Error('Invalid share: group threshold exceeds group count.');
   }
 
-  // The secret is a whole number of 16-bit units, so the padding is
-  // whatever the 10-bit words carry beyond that.
-  var valueWords = words.length - METADATA_WORDS;
-  var padding = (valueWords * 10) % 16;
+  const valueWords = words.length - METADATA_WORDS;
+  const padding = (valueWords * 10) % 16;
   if (padding > 8) throw new Error('Invalid share length.');
-  for (i = 0; i < padding; i++) {
+  for (let i = 0; i < padding; i++) {
     if (bits[at + i] !== 0) throw new Error('Invalid share: padding bits are not zero.');
   }
   at += padding;
 
-  var valueBytes = (valueWords * 10 - padding) / 8;
-  var value = new Uint8Array(valueBytes);
-  for (i = 0; i < valueBytes; i++) value[i] = take(8);
+  const valueBytes = (valueWords * 10 - padding) / 8;
+  const value = new Uint8Array(valueBytes);
+  for (let i = 0; i < valueBytes; i++) value[i] = take(8);
   out.value = value;
   return out;
 }
-
-/* ============================================================
-   Master-secret encryption
-
-   Four-round Feistel with PBKDF2-HMAC-SHA256 as the round function.
-   In extendable mode the salt is empty, so nothing has to travel
-   alongside the share to decrypt it later.
-   ============================================================ */
 
 function encryptionSalt(id, ext) {
   if (ext) return new Uint8Array(0);
@@ -688,28 +589,23 @@ function encryptionSalt(id, ext) {
 }
 
 function roundFunction(i, passphrase, e, salt, r) {
-  var password = concatBytes(new Uint8Array([i]), passphrase);
-  var iterations = (BASE_ITERATIONS << e) / ROUNDS;
+  const password = concatBytes(new Uint8Array([i]), passphrase);
+  const iterations = (BASE_ITERATIONS << e) / ROUNDS;
   return pbkdf2('SHA-256', password, concatBytes(salt, r), iterations, r.length);
 }
 
-function feistel(data, passphrase, e, id, ext, forward) {
-  var half = data.length / 2;
-  var l = data.subarray(0, half), r = data.subarray(half);
-  var salt = encryptionSalt(id, ext);
-  var order = [];
-  for (var i = 0; i < ROUNDS; i++) order.push(forward ? i : ROUNDS - 1 - i);
-
-  return order.reduce(function (chain, i) {
-    return chain.then(function () {
-      return roundFunction(i, passphrase, e, salt, r);
-    }).then(function (f) {
-      var next = xorBytes(l, f);
-      l = r; r = next;
-    });
-  }, Promise.resolve()).then(function () {
-    return concatBytes(r, l);
-  });
+async function feistel(data, passphrase, e, id, ext, forward) {
+  const half = data.length / 2;
+  let l = data.subarray(0, half), r = data.subarray(half);
+  const salt = encryptionSalt(id, ext);
+  for (let round = 0; round < ROUNDS; round++) {
+    const i = forward ? round : ROUNDS - 1 - round;
+    const f = await roundFunction(i, passphrase, e, salt, r);
+    const next = xorBytes(l, f);
+    l = r;
+    r = next;
+  }
+  return concatBytes(r, l);
 }
 
 function encryptMasterSecret(secret, passphrase, e, id, ext) {
@@ -720,204 +616,163 @@ function decryptMasterSecret(ems, passphrase, e, id, ext) {
   return feistel(ems, passphrase, e, id, ext, false);
 }
 
-/* ============================================================
-   Shamir split and recover
-   ============================================================ */
-
-function createDigest(randomPart, sharedSecret) {
-  return hmac('SHA-256', randomPart, sharedSecret).then(function (mac) {
-    return mac.subarray(0, DIGEST_BYTES);
-  });
+async function createDigest(randomPart, sharedSecret) {
+  return (await hmac('SHA-256', randomPart, sharedSecret)).subarray(0, DIGEST_BYTES);
 }
 
-function splitSecret(threshold, count, secret) {
+async function splitSecret(threshold, count, secret) {
   if (threshold < 1 || threshold > count || count > 16) {
-    return Promise.reject(new Error('Invalid threshold or share count.'));
+    throw new Error('Invalid threshold or share count.');
   }
   if (threshold === 1) {
-    var copies = [];
-    for (var i = 0; i < count; i++) copies.push({ x: i, y: new Uint8Array(secret) });
-    return Promise.resolve(copies);
+    return Array.from({ length: count }, (_, i) => ({ x: i, y: new Uint8Array(secret) }));
   }
 
-  var randomCount = threshold - 2, shares = [], j;
-  for (j = 0; j < randomCount; j++) shares.push({ x: j, y: randomBytes(secret.length) });
-  var randomPart = randomBytes(secret.length - DIGEST_BYTES);
+  const randomCount = threshold - 2;
+  const shares = Array.from({ length: randomCount },
+    (_, j) => ({ x: j, y: randomBytes(secret.length) }));
+  const randomPart = randomBytes(secret.length - DIGEST_BYTES);
 
-  return createDigest(randomPart, secret).then(function (digest) {
-    var base = shares.concat([
-      { x: DIGEST_INDEX, y: concatBytes(digest, randomPart) },
-      { x: SECRET_INDEX, y: secret }
-    ]);
-    for (var k = randomCount; k < count; k++) {
-      shares.push({ x: k, y: interpolate(base, k) });
-    }
-    return shares;
-  });
+  const digest = await createDigest(randomPart, secret);
+  const base = shares.concat([
+    { x: DIGEST_INDEX, y: concatBytes(digest, randomPart) },
+    { x: SECRET_INDEX, y: secret }
+  ]);
+  for (let k = randomCount; k < count; k++) {
+    shares.push({ x: k, y: interpolate(base, k) });
+  }
+  return shares;
 }
 
-function recoverSecret(threshold, shares) {
-  if (threshold === 1) return Promise.resolve(new Uint8Array(shares[0].y));
-  var secret = interpolate(shares, SECRET_INDEX);
-  var digestShare = interpolate(shares, DIGEST_INDEX);
-  var digest = digestShare.subarray(0, DIGEST_BYTES);
-  var randomPart = digestShare.subarray(DIGEST_BYTES);
-  return createDigest(randomPart, secret).then(function (expected) {
-    if (bytesToHex(expected) !== bytesToHex(digest)) {
-      throw new Error('These shares do not belong together.');
-    }
-    return secret;
-  });
+async function recoverSecret(threshold, shares) {
+  if (threshold === 1) return new Uint8Array(shares[0].y);
+  const secret = interpolate(shares, SECRET_INDEX);
+  const digestShare = interpolate(shares, DIGEST_INDEX);
+  const expected = await createDigest(digestShare.subarray(DIGEST_BYTES), secret);
+  if (expected.toHex() !== digestShare.subarray(0, DIGEST_BYTES).toHex()) {
+    throw new Error('These shares do not belong together.');
+  }
+  return secret;
 }
 
-/* ============================================================
-   Public API — single group, threshold of count
-   ============================================================ */
-
-function generateShares(secret, threshold, count, passphrase, e) {
+async function generateShares(secret, threshold, count, passphrase, e = 1) {
   if (secret.length < 16 || secret.length % 2 !== 0) {
-    return Promise.reject(new Error('The secret must be at least 128 bits and a whole number of 16-bit units.'));
+    throw new Error('The secret must be at least 128 bits and a whole number of 16-bit units.');
   }
-  var idBytes = randomBytes(2);
-  var id = ((idBytes[0] << 8) | idBytes[1]) & 0x7fff;
-  var exp = e === undefined ? 1 : e;
-  var pass = passphrase ? utf8.encode(passphrase) : new Uint8Array(0);
+  const idBytes = randomBytes(2);
+  const id = ((idBytes[0] << 8) | idBytes[1]) & 0x7fff;
+  const pass = passphrase ? utf8.encode(passphrase) : new Uint8Array(0);
 
-  return encryptMasterSecret(secret, pass, exp, id, true).then(function (ems) {
-    return splitSecret(threshold, count, ems);
-  }).then(function (shares) {
-    return shares.map(function (s) {
-      return encodeMnemonic({
-        id: id, ext: true, e: exp,
-        groupIndex: 0, groupThreshold: 1, groupCount: 1,
-        memberIndex: s.x, memberThreshold: threshold, value: s.y
-      });
-    });
-  });
+  const ems = await encryptMasterSecret(secret, pass, e, id, true);
+  const shares = await splitSecret(threshold, count, ems);
+  return shares.map(s => encodeMnemonic({
+    id, ext: true, e,
+    groupIndex: 0, groupThreshold: 1, groupCount: 1,
+    memberIndex: s.x, memberThreshold: threshold, value: s.y
+  }));
 }
 
-function combineMnemonics(mnemonics, passphrase) {
-  if (!mnemonics || !mnemonics.length) return Promise.reject(new Error('No shares given.'));
+async function combineMnemonics(mnemonics, passphrase) {
+  if (!mnemonics || !mnemonics.length) throw new Error('No shares given.');
 
-  var decoded = mnemonics.map(decodeMnemonic);
-  var first = decoded[0], i;
-  for (i = 1; i < decoded.length; i++) {
-    var d = decoded[i];
+  const decoded = mnemonics.map(decodeMnemonic);
+  const first = decoded[0];
+  for (const d of decoded.slice(1)) {
     if (d.id !== first.id || d.ext !== first.ext || d.e !== first.e ||
       d.groupThreshold !== first.groupThreshold || d.groupCount !== first.groupCount) {
       throw new Error('These shares come from different backups.');
     }
   }
 
-  // Bucket by group, then recover each group secret from its members.
-  var groups = {};
-  decoded.forEach(function (d) {
-    var g = groups[d.groupIndex] || (groups[d.groupIndex] = { threshold: d.memberThreshold, members: [] });
-    if (g.threshold !== d.memberThreshold) throw new Error('Inconsistent member thresholds within a group.');
-    if (g.members.some(function (m) { return m.x === d.memberIndex; })) {
+  const groups = new Map();
+  for (const d of decoded) {
+    let g = groups.get(d.groupIndex);
+    if (!g) groups.set(d.groupIndex, g = { threshold: d.memberThreshold, members: [] });
+    if (g.threshold !== d.memberThreshold) {
+      throw new Error('Inconsistent member thresholds within a group.');
+    }
+    if (g.members.some(m => m.x === d.memberIndex)) {
       throw new Error('The same share was supplied twice.');
     }
     g.members.push({ x: d.memberIndex, y: d.value });
-  });
-
-  var indices = Object.keys(groups);
-  var usable = indices.filter(function (gi) {
-    return groups[gi].members.length >= groups[gi].threshold;
-  });
-  if (usable.length < first.groupThreshold) {
-    throw new Error('Not enough shares — need ' + first.groupThreshold +
-      ' group' + (first.groupThreshold === 1 ? '' : 's') + '.');
   }
-  usable = usable.slice(0, first.groupThreshold);
 
-  indices.forEach(function (gi) {
-    var g = groups[gi];
-    if (g.members.length !== g.threshold && usable.indexOf(gi) >= 0) {
-      throw new Error('Wrong number of shares for group ' + gi + '.');
+  const usable = [...groups.keys()]
+    .filter(gi => groups.get(gi).members.length >= groups.get(gi).threshold);
+  if (usable.length < first.groupThreshold) {
+    throw new Error(`Not enough shares — need ${first.groupThreshold} group`
+      + `${first.groupThreshold === 1 ? '' : 's'}.`);
+  }
+  const chosen = usable.slice(0, first.groupThreshold);
+
+  for (const [gi, g] of groups) {
+    if (g.members.length !== g.threshold && chosen.includes(gi)) {
+      throw new Error(`Wrong number of shares for group ${gi}.`);
     }
-  });
+  }
 
-  return Promise.all(usable.map(function (gi) {
-    var g = groups[gi];
-    return recoverSecret(g.threshold, g.members).then(function (y) {
-      return { x: Number(gi), y: y };
-    });
-  })).then(function (groupShares) {
-    return recoverSecret(first.groupThreshold, groupShares);
-  }).then(function (ems) {
-    var pass = passphrase ? utf8.encode(passphrase) : new Uint8Array(0);
-    return decryptMasterSecret(ems, pass, first.e, first.id, first.ext);
-  });
+  const groupShares = await Promise.all(chosen.map(async gi => {
+    const g = groups.get(gi);
+    return { x: gi, y: await recoverSecret(g.threshold, g.members) };
+  }));
+  const ems = await recoverSecret(first.groupThreshold, groupShares);
+  const pass = passphrase ? utf8.encode(passphrase) : new Uint8Array(0);
+  return decryptMasterSecret(ems, pass, first.e, first.id, first.ext);
 }
 
-/* ============================================================
-   BIP-39
-   ============================================================ */
-
-function bip39ToEntropy(phrase) {
-  var words = String(phrase).toLowerCase().trim().split(/\s+/).filter(Boolean);
-  if ([12, 15, 18, 21, 24].indexOf(words.length) < 0) {
+async function bip39ToEntropy(phrase) {
+  const words = String(phrase).toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (![12, 15, 18, 21, 24].includes(words.length)) {
     throw new Error('A BIP-39 phrase must be 12, 15, 18, 21 or 24 words.');
   }
-  var bits = [];
-  words.forEach(function (w) {
-    var i = BIP39_WORDS.indexOf(w);
-    if (i < 0) throw new Error('"' + w + '" is not a BIP-39 word.');
+  const bits = [];
+  for (const w of words) {
+    const i = BIP39_WORDS.indexOf(w);
+    if (i < 0) throw new Error(`"${w}" is not a BIP-39 word.`);
     pushBits(bits, i, 11);
-  });
-  var checkBits = bits.length / 33;
-  var entBits = bits.length - checkBits;
-  var entropy = new Uint8Array(entBits / 8), i;
-  for (i = 0; i < entropy.length; i++) {
-    var v = 0;
-    for (var j = 0; j < 8; j++) v = (v << 1) | bits[i * 8 + j];
+  }
+  const checkBits = bits.length / 33;
+  const entBits = bits.length - checkBits;
+  const entropy = new Uint8Array(entBits / 8);
+  for (let i = 0; i < entropy.length; i++) {
+    let v = 0;
+    for (let j = 0; j < 8; j++) v = (v << 1) | bits[i * 8 + j];
     entropy[i] = v;
   }
-  return sha256(entropy).then(function (h) {
-    for (var k = 0; k < checkBits; k++) {
-      if (((h[k >> 3] >> (7 - (k & 7))) & 1) !== bits[entBits + k]) {
-        throw new Error('That phrase fails its BIP-39 checksum — check for a mistyped word.');
-      }
+  const h = await sha256(entropy);
+  for (let k = 0; k < checkBits; k++) {
+    if (((h[k >> 3] >> (7 - (k & 7))) & 1) !== bits[entBits + k]) {
+      throw new Error('That phrase fails its BIP-39 checksum — check for a mistyped word.');
     }
-    return entropy;
-  });
+  }
+  return entropy;
 }
 
-function bip39FromEntropy(entropy) {
-  return sha256(entropy).then(function (h) {
-    var bits = [], i;
-    for (i = 0; i < entropy.length; i++) pushBits(bits, entropy[i], 8);
-    var checkBits = entropy.length * 8 / 32;
-    for (i = 0; i < checkBits; i++) bits.push((h[i >> 3] >> (7 - (i & 7))) & 1);
-    var words = [];
-    for (i = 0; i < bits.length; i += 11) {
-      var v = 0;
-      for (var j = 0; j < 11; j++) v = (v << 1) | bits[i + j];
-      words.push(BIP39_WORDS[v]);
-    }
-    return words.join(' ');
-  });
+async function bip39FromEntropy(entropy) {
+  const h = await sha256(entropy);
+  const bits = [];
+  for (const b of entropy) pushBits(bits, b, 8);
+  const checkBits = entropy.length * 8 / 32;
+  for (let i = 0; i < checkBits; i++) bits.push((h[i >> 3] >> (7 - (i & 7))) & 1);
+  const words = [];
+  for (let i = 0; i < bits.length; i += 11) {
+    let v = 0;
+    for (let j = 0; j < 11; j++) v = (v << 1) | bits[i + j];
+    words.push(BIP39_WORDS[v]);
+  }
+  return words.join(' ');
 }
 
 function bip39Seed(phrase, passphrase) {
-  var norm = String(phrase).normalize('NFKD');
-  var salt = ('mnemonic' + String(passphrase || '')).normalize('NFKD');
+  const norm = String(phrase).normalize('NFKD');
+  const salt = ('mnemonic' + String(passphrase || '')).normalize('NFKD');
   return pbkdf2('SHA-512', utf8.encode(norm), utf8.encode(salt), 2048, 64);
 }
 
-/* ============================================================
-   WebAuthn largeBlob
-
-   Each YubiKey holds one discoverable credential and one blob, bound to
-   this page's hostname. A credential cannot be read from any other
-   origin, so enrolling at localhost and enrolling at a website produce
-   two separate, non-interchangeable backups.
-   ============================================================ */
-
-var RECORD_VERSION = 1;
+const RECORD_VERSION = 1;
 
 function toBlobRecord(o) {
-  var rec = {
+  return {
     'version': RECORD_VERSION,
     'format': o.of,
     'domain': o.rp,
@@ -930,7 +785,6 @@ function toBlobRecord(o) {
     'passphrase-protected': !!o.hasPass,
     'created': o.created
   };
-  return rec;
 }
 
 function fromBlobRecord(j) {
@@ -943,41 +797,20 @@ function fromBlobRecord(j) {
   };
 }
 
-// Chrome refuses to navigate to chrome:// from a web page, so this can only
-// ever be copied for the user to paste — never opened by a link or window.open.
-var KEYS_SETTINGS_URL = 'chrome://settings/securityKeys';
-
-var HOSTED_URL = 'https://yubishard.com/';
-var BLOB_BUDGET = 900;   // spec guarantees >= 1024 serialized; leave headroom
+const KEYS_SETTINGS_URL = 'chrome://settings/securityKeys';
+const HOSTED_URL = 'https://yubishard.com/';
+const BLOB_BUDGET = 900;
 
 function rpId() { return location.hostname; }
 
 function challenge() { return crypto.getRandomValues(new Uint8Array(32)); }
 
-// Credential IDs minted during this session, passed to create() as
-// excludeCredentials so the authenticator itself refuses a key we have
-// already written to. Costs no extra ceremony and cannot be cancelled past.
-var enrolledIds = [];
+let enrolledIds = [];
+let pendingCred = null;
 
-/* Chrome permits only one WebAuthn request at a time, and a rejected one
-   takes a moment to tear down. With a real key the human takes seconds
-   between ceremonies so this never shows; with a DevTools virtual
-   authenticator the calls resolve instantly and the next request lands while
-   the previous is still closing, which surfaces as an intermittent failure
-   that succeeds on retry. Yield to the event loop between ceremonies. */
-function settle(ms) {
-  return new Promise(function (r) { setTimeout(r, ms || 300); });
+function settle(ms = 300) {
+  return new Promise(r => setTimeout(r, ms));
 }
-
-/* A credential created for a share whose blob write then failed.
-
-   Every create() burns a resident slot on the key, and those slots are finite —
-   25 before firmware 5.7, 100 after. Without this, each retry would leave
-   another unused credential behind, and once a key carries several of them
-   Chrome starts showing an account picker on every read, which breaks the
-   restore flow. So a retry reuses the credential it already made rather than
-   minting a fresh one. */
-var pendingCred = null;    // { i: shareIndex, id: rawId }
 
 function friendlyAuthError(e) {
   if (!e) return new Error('The key did not respond.');
@@ -999,40 +832,28 @@ function friendlyAuthError(e) {
   return e;
 }
 
-
-/* One press per key: check the key is free, create the credential, then write
-   the blob. WebAuthn only writes a large blob during an assertion, never at
-   registration, so the write is always its own ceremony. */
-function writeShareToKey(record) {
-  var bytes = utf8.encode(JSON.stringify(toBlobRecord(record)));
+async function writeShareToKey(record) {
+  const bytes = utf8.encode(JSON.stringify(toBlobRecord(record)));
   if (bytes.length > BLOB_BUDGET) {
-    return Promise.reject(new Error('That label is too long to fit alongside the share.'));
+    throw new Error('That label is too long to fit alongside the share.');
   }
-  // A previous press created a credential but failed to write to it. Reuse it
-  // rather than registering another — each create() burns a resident slot, and
-  // several credentials for one origin make Chrome show a picker on every read.
   if (pendingCred && pendingCred.i === record.i) {
-    var resumeId = pendingCred.id;
-    return writeBlob(resumeId, bytes).then(function () {
-      pendingCred = null;
-      return true;
-    }).catch(function (e) {
-      pendingCred = null;
+    try {
+      return await writeBlob(pendingCred.id, bytes);
+    } catch (e) {
       throw friendlyAuthError(e);
-    });
+    } finally {
+      pendingCred = null;
+    }
   }
-  return Promise.resolve().then(function () {
-    return navigator.credentials.create({
+  try {
+    const cred = await navigator.credentials.create({
       publicKey: {
         challenge: challenge(),
         rp: { id: rpId(), name: 'YubiShard' },
         user: {
           id: crypto.getRandomValues(new Uint8Array(16)),
-          // This is what Chrome's picker and `ykman fido credentials list`
-          // show, so it carries the user's own label for the key — a bare
-          // share number is no help when you are holding five of them.
-          name: 'YubiShard: ' + record.label
-            + ' (share-' + (record.i + 1) + '-of-' + record.n + ')',
+          name: `YubiShard: ${record.label} (share-${record.i + 1}-of-${record.n})`,
           displayName: record.label
         },
         pubKeyCredParams: [
@@ -1043,42 +864,31 @@ function writeShareToKey(record) {
           residentKey: 'required',
           userVerification: 'required'
         },
-        // Backstop for the check above: the authenticator refuses outright
-        // if this key already took a share earlier in this session.
-        excludeCredentials: enrolledIds.map(function (id) {
-          return { type: 'public-key', id: id };
-        }),
+        excludeCredentials: enrolledIds.map(id => ({ type: 'public-key', id })),
         timeout: 120000,
         attestation: 'none',
         extensions: { largeBlob: { support: 'required' } }
       }
     });
-  }).then(function (cred) {
     if (!cred) throw new Error('The key did not return a credential.');
-    var ext = cred.getClientExtensionResults();
+    const ext = cred.getClientExtensionResults();
     if (!ext.largeBlob || ext.largeBlob.supported !== true) {
       throw new Error('This key cannot store a share. largeBlob needs YubiKey firmware 5.7 or '
         + 'newer — check yours with "ykman info".');
     }
     enrolledIds.push(cred.rawId);
-    // Remembered so that if the write below fails, the next press retries
-    // against this credential instead of creating a second one.
     pendingCred = { i: record.i, id: cred.rawId };
-    return settle().then(function () {
-      return writeBlob(cred.rawId, bytes);
-    }).then(function (ok) {
-      pendingCred = null;
-      return ok;
-    });
-  }).catch(function (e) { throw friendlyAuthError(e); });
+    await settle();
+    const ok = await writeBlob(cred.rawId, bytes);
+    pendingCred = null;
+    return ok;
+  } catch (e) {
+    throw friendlyAuthError(e);
+  }
 }
 
-/* The blob write. One attempt — every retry costs the user a PIN and a touch,
-   and a write that is going to fail fails consistently rather than flakily.
-   If it does fail, `pendingCred` lets the next press retry on the same
-   credential. */
-function writeBlob(credId, bytes) {
-  return navigator.credentials.get({
+async function writeBlob(credId, bytes) {
+  const assertion = await navigator.credentials.get({
     publicKey: {
       challenge: challenge(),
       rpId: rpId(),
@@ -1087,55 +897,46 @@ function writeBlob(credId, bytes) {
       timeout: 120000,
       extensions: { largeBlob: { write: bytes } }
     }
-  }).then(function (assertion) {
-    var ext = assertion && assertion.getClientExtensionResults();
-    var lb = ext && ext.largeBlob;
-    if (lb && lb.written === true) return true;
-    throw Object.assign(new Error('The key did not store the share. The credential it left behind '
-      + 'is unused.'), { notWritten: true });
   });
+  const lb = assertion?.getClientExtensionResults()?.largeBlob;
+  if (lb?.written === true) return true;
+  throw Object.assign(new Error('The key did not store the share. The credential it left behind '
+    + 'is unused.'), { notWritten: true });
 }
 
-function readShareFromKey() {
-  return navigator.credentials.get({
-    publicKey: {
-      challenge: challenge(),
-      rpId: rpId(),
-      allowCredentials: [],
-      userVerification: 'required',
-      timeout: 120000,
-      extensions: { largeBlob: { read: true } }
-    }
-  }).then(function (assertion) {
-    var ext = assertion && assertion.getClientExtensionResults();
-    if (!ext || !ext.largeBlob || !ext.largeBlob.blob) {
-      // A key enrolled at a different origin is indistinguishable from a blank
-      // one here, so the message has to cover both.
-      throw new Error('No YubiShard share on this key for ' + rpId() + '. If you enrolled it at '
+async function readShareFromKey() {
+  try {
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge: challenge(),
+        rpId: rpId(),
+        allowCredentials: [],
+        userVerification: 'required',
+        timeout: 120000,
+        extensions: { largeBlob: { read: true } }
+      }
+    });
+    const ext = assertion?.getClientExtensionResults();
+    if (!ext?.largeBlob?.blob) {
+      throw new Error(`No YubiShard share on this key for ${rpId()}. If you enrolled it at `
         + 'the other address, open that one instead.');
     }
-    var rec;
+    let rec = null;
     try {
       rec = fromBlobRecord(
         JSON.parse(new TextDecoder().decode(new Uint8Array(ext.largeBlob.blob))));
-    } catch (e) { rec = null; }
+    } catch { }
     if (!rec) {
       throw new Error('What is stored on this key is not a YubiShard share.');
     }
     return rec;
-  }).catch(function (e) { throw friendlyAuthError(e); });
+  } catch (e) {
+    throw friendlyAuthError(e);
+  }
 }
 
-/* ============================================================
-   Environment
-
-   file:// is a secure context, so crypto.subtle works there — but it has
-   no hostname, and WebAuthn derives its relying-party ID from one. That
-   is the reason a server is required, not TLS.
-   ============================================================ */
-
 function localhostUrl() {
-  return location.protocol + '//localhost' + (location.port ? ':' + location.port : '')
+  return `${location.protocol}//localhost${location.port ? ':' + location.port : ''}`
     + location.pathname + location.search;
 }
 
@@ -1156,19 +957,19 @@ function envReport() {
         + 'this folder and open <code>http://localhost:8000/</code>.'
     };
   }
-  var host = location.hostname;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.indexOf(':') >= 0) {
+  const host = location.hostname;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(':')) {
     if (isLoopbackHost(host)) {
       return {
-        ok: false, html: 'Use <a href="' + localhostUrl() + '"><code>' + localhostUrl()
-          + '</code></a>, not an IP address.'
+        ok: false,
+        html: `Use <a href="${localhostUrl()}"><code>${localhostUrl()}</code></a>, not an IP address.`
       };
     }
     return {
       ok: false, html: '<b>Use a hostname, not an IP address.</b> A bare IP can never identify a '
         + 'site to a security key, and this page is served from another machine, so '
-        + '<code>localhost</code> will not reach it. Open <a href="' + HOSTED_URL + '"><code>'
-        + HOSTED_URL + '</code></a>, or download YubiShard and run it on your own machine.'
+        + `<code>localhost</code> will not reach it. Open <a href="${HOSTED_URL}"><code>`
+        + `${HOSTED_URL}</code></a>, or download YubiShard and run it on your own machine.`
     };
   }
   if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials) {
@@ -1177,40 +978,30 @@ function envReport() {
         + 'Chrome on macOS or Windows 11, opened over <code>http://localhost</code> or https.'
     };
   }
-  var parts = [];
+  const parts = [];
   if (!window.chrome) {
     parts.push('<b>This browser is probably not supported.</b> Storing a share on a key uses the '
       + 'largeBlob extension, which Firefox does not implement and does not plan to. Use Chrome.');
   }
-  parts.push('Keys enrolled here are tied to <b><code>' + esc(host) + '</code></b> and can only be '
+  parts.push(`Keys enrolled here are tied to <b><code>${esc(host)}</code></b> and can only be `
     + 'read back at this same URL.');
   return { ok: true, html: parts.join(' ') };
 }
 
-/* ============================================================
-   State
-   ============================================================ */
-
-var state = {
+const state = {
   dark: false, view: 'home', step: 0,
 
-  // phrase entry
-  count: 12, words: fill(12, ''), inputPass: '',
-  // Recorded, never used to derive anything. null until the user answers.
+  count: 12, words: Array(12).fill(''), inputPass: '',
   hasPass: null,
   secret: null, seedFp: '', seedErr: '',
 
-  // split
   n: 5, m: 3, shares: [],
 
-  // writing shares onto keys
   written: [], keyLabel: '', busy: false, writeErr: '',
   urlCopied: false,
 
-  // read-back gate
   vRecords: [], verifyMsg: '', verifyOk: null,
 
-  // restore
   rRecords: [], readErr: '',
   rSeed: '', rFp: '', rKind: '', rAlt: '', rHasPass: false,
   reveal: false, seedCopied: false,
@@ -1218,23 +1009,19 @@ var state = {
   env: envReport()
 };
 
-function fill(n, v) { return Array.apply(null, Array(n)).map(function () { return v; }); }
 function setState(patch) { Object.assign(state, patch); render(); }
 
 function seedPhrase() {
-  return state.words.map(function (w) { return w.trim().toLowerCase(); })
-    .filter(Boolean).join(' ');
+  return state.words.map(w => w.trim().toLowerCase()).filter(Boolean).join(' ');
 }
 
-function allWordsIn() { return state.words.every(function (w) { return w.trim().length > 0; }); }
+function allWordsIn() { return state.words.every(w => w.trim().length > 0); }
 
-/* 20 words is a SLIP-39 master secret; 12 and 24 are BIP-39 entropy. The two
-   are not interchangeable — see the note under the passphrase field. */
 function isSlip39() { return state.count === 20; }
 
 function standardLabel() {
   if (state.count === 20) return 'SLIP-39 · 128-bit master secret';
-  return 'BIP-39 · ' + (state.count === 12 ? '128' : '256') + '-bit entropy';
+  return `BIP-39 · ${state.count === 12 ? '128' : '256'}-bit entropy`;
 }
 
 function originKind() {
@@ -1242,15 +1029,10 @@ function originKind() {
   return state.count === 12 ? 'bip39-128' : 'bip39-256';
 }
 
-/* ============================================================
-   DOM helpers
-   ============================================================ */
-
 function $(sel, root) { return (root || document).querySelector(sel); }
 
 function setText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
 
-// Never fight the caret: only write into a field the user is not editing.
 function setVal(el, v) {
   if (el && el !== document.activeElement && el.value !== v) el.value = v;
 }
@@ -1263,26 +1045,23 @@ function setOn(el, on) {
 }
 
 function esc(t) {
-  return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(t).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-// Grow/shrink `container` to `count` children, then update each in place.
-// Surviving nodes are never replaced, so inputs keep focus and selection.
 function syncList(container, tplId, count, update) {
-  var tpl = document.getElementById(tplId);
+  const tpl = document.getElementById(tplId);
   while (container.children.length > count) container.removeChild(container.lastElementChild);
   while (container.children.length < count) {
     container.appendChild(tpl.content.firstElementChild.cloneNode(true));
   }
-  for (var i = 0; i < count; i++) {
-    var el = container.children[i];
+  for (let i = 0; i < count; i++) {
+    const el = container.children[i];
     el.dataset.i = String(i);
     update(el, i);
   }
 }
 
-
-var BUNDLE_FILES = [
+const BUNDLE_FILES = [
   { name: 'index.html', mode: 0o644 },
   { name: 'styles.css', mode: 0o644 },
   { name: 'app.js', mode: 0o644 },
@@ -1290,33 +1069,25 @@ var BUNDLE_FILES = [
   { name: 'serve.bat', mode: 0o644 }
 ];
 
-var CRC_TABLE = (function () {
-  var t = new Uint32Array(256), c, i, k;
-  for (i = 0; i < 256; i++) {
-    c = i;
-    for (k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-    t[i] = c >>> 0;
-  }
-  return t;
-})();
+const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, i) => {
+  let c = i;
+  for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+  return c >>> 0;
+});
 
 function crc32(bytes) {
-  var c = 0xffffffff;
-  for (var i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  let c = 0xffffffff;
+  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function deflate(bytes) {
-  if (typeof CompressionStream !== 'function') {
-    return Promise.resolve({ method: 0, data: bytes });
-  }
+async function deflate(bytes) {
+  if (typeof CompressionStream !== 'function') return { method: 0, data: bytes };
   try {
-    var cs = new CompressionStream('deflate-raw');
-    return new Response(new Blob([bytes]).stream().pipeThrough(cs)).arrayBuffer()
-      .then(function (buf) { return { method: 8, data: new Uint8Array(buf) }; },
-        function () { return { method: 0, data: bytes }; });
-  } catch (e) {
-    return Promise.resolve({ method: 0, data: bytes });
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return { method: 8, data: await new Response(stream).bytes() };
+  } catch {
+    return { method: 0, data: bytes };
   }
 }
 
@@ -1329,13 +1100,14 @@ function dosDate(d) {
 }
 
 function buildZip(entries) {
-  var now = new Date(), time = dosTime(now), date = dosDate(now);
-  var chunks = [], central = [], offset = 0;
+  const now = new Date(), time = dosTime(now), date = dosDate(now);
+  const chunks = [], central = [];
+  let offset = 0;
 
-  entries.forEach(function (e) {
-    var name = utf8.encode(e.name);
-    var local = new Uint8Array(30 + name.length);
-    var dv = new DataView(local.buffer);
+  for (const e of entries) {
+    const name = utf8.encode(e.name);
+    const local = new Uint8Array(30 + name.length);
+    const dv = new DataView(local.buffer);
     dv.setUint32(0, 0x04034b50, true);
     dv.setUint16(4, 20, true);
     dv.setUint16(6, 0, true);
@@ -1349,8 +1121,8 @@ function buildZip(entries) {
     local.set(name, 30);
     chunks.push(local, e.data);
 
-    var cd = new Uint8Array(46 + name.length);
-    var cv = new DataView(cd.buffer);
+    const cd = new Uint8Array(46 + name.length);
+    const cv = new DataView(cd.buffer);
     cv.setUint32(0, 0x02014b50, true);
     cv.setUint16(4, 0x031e, true);
     cv.setUint16(6, 20, true);
@@ -1367,172 +1139,133 @@ function buildZip(entries) {
     central.push(cd);
 
     offset += local.length + e.data.length;
-  });
+  }
 
-  var cdSize = central.reduce(function (n, c) { return n + c.length; }, 0);
-  var end = new Uint8Array(22);
-  var ev = new DataView(end.buffer);
+  const cdSize = central.reduce((n, c) => n + c.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
   ev.setUint32(0, 0x06054b50, true);
   ev.setUint16(8, entries.length, true);
   ev.setUint16(10, entries.length, true);
   ev.setUint32(12, cdSize, true);
   ev.setUint32(16, offset, true);
 
-  return new Blob(chunks.concat(central, [end]), { type: 'application/zip' });
+  return new Blob([...chunks, ...central, end], { type: 'application/zip' });
 }
 
-var bundleUrl = null, bundlePending = null;
+let bundleUrl = null, bundlePending = null;
 
 function prepareBundle() {
   if (bundleUrl) return Promise.resolve(bundleUrl);
   if (bundlePending) return bundlePending;
-  bundlePending = Promise.all(BUNDLE_FILES.map(function (f) {
-    return fetch(f.name).then(function (r) {
-      if (!r.ok) throw new Error(f.name + ' — ' + r.status);
-      return r.arrayBuffer();
-    }).then(function (buf) {
-      var bytes = new Uint8Array(buf);
-      return deflate(bytes).then(function (z) {
-        return {
-          name: f.name, mode: f.mode, raw: bytes.length,
-          crc: crc32(bytes), method: z.method, data: z.data
-        };
-      });
-    });
-  })).then(function (entries) {
+  bundlePending = Promise.all(BUNDLE_FILES.map(async f => {
+    const r = await fetch(f.name);
+    if (!r.ok) throw new Error(`${f.name} — ${r.status}`);
+    const bytes = await r.bytes();
+    const z = await deflate(bytes);
+    return {
+      name: f.name, mode: f.mode, raw: bytes.length,
+      crc: crc32(bytes), method: z.method, data: z.data
+    };
+  })).then(entries => {
     bundleUrl = URL.createObjectURL(buildZip(entries));
-    var a = $('#dl-link');
+    const a = $('#dl-link');
     if (a) {
       a.href = bundleUrl;
       a.download = 'yubishard.zip';
       a.removeAttribute('data-act');
     }
     return bundleUrl;
-  }).catch(function (e) {
+  }).catch(e => {
     bundlePending = null;
     throw e;
   });
   return bundlePending;
 }
 
-// Only reached if the link is clicked before the bundle finished building.
 function downloadBundle() {
-  prepareBundle().then(function (url) {
-    var a = document.createElement('a');
+  prepareBundle().then(url => {
+    const a = document.createElement('a');
     a.href = url;
     a.download = 'yubishard.zip';
     a.click();
-  }).catch(function (e) {
+  }).catch(e => {
     window.alert('Could not build the download: ' + e.message);
   });
 }
 
-/* ============================================================
-   Clipboard
-   ============================================================ */
-
-// navigator.clipboard is unavailable or rejects on some origins.
 function legacyCopy(text) {
-  var ta = document.createElement('textarea');
+  const ta = document.createElement('textarea');
   ta.value = text;
   ta.setAttribute('readonly', '');
   ta.style.position = 'fixed';
   ta.style.top = '-1000px';
   document.body.appendChild(ta);
   ta.select();
-  var ok = false;
-  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
   document.body.removeChild(ta);
   return ok;
 }
 
-function copyText(text) {
+async function copyText(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(text).then(
-      function () { return true; },
-      function () { return legacyCopy(text); }
-    );
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch { }
   }
-  return Promise.resolve(legacyCopy(text));
+  return legacyCopy(text);
 }
 
-/* ============================================================
-   Reading the entered phrase
+let seedToken = 0;
 
-   Async because both branches end in WebCrypto. A token guards against an
-   older keystroke's result landing after a newer one.
-   ============================================================ */
-
-var seedToken = 0;
-
-function readEnteredSeed() {
-  var phrase = seedPhrase();
+async function readEnteredSeed() {
+  const phrase = seedPhrase();
   if (isSlip39()) {
-    // Here the passphrase decrypts the input: without it these words yield a
-    // different secret and nothing says so. The master secret is the BIP-32
-    // seed directly, which is what makes 20-word input lossless.
-    return combineMnemonics([phrase], state.inputPass).then(function (secret) {
-      return { secret: secret, seed: secret };
-    });
+    const secret = await combineMnemonics([phrase], state.inputPass);
+    return { secret, seed: secret };
   }
-  // BIP-39 runs the words through PBKDF2 to reach the seed, so the entropy we
-  // split and the seed we fingerprint are different values. Always an empty
-  // passphrase: a wallet passphrase is recorded as a flag and never used, which
-  // is what keeps this fingerprint reproducible at restore.
-  return bip39ToEntropy(phrase).then(function (entropy) {
-    return bip39Seed(phrase, '').then(function (seed) {
-      return { secret: entropy, seed: seed };
-    });
-  });
+  const entropy = await bip39ToEntropy(phrase);
+  const seed = await bip39Seed(phrase, '');
+  return { secret: entropy, seed };
 }
 
-/* Fingerprint of a recovered secret, for checking a restore against the value
-   stored on the keys. Always an empty passphrase, matching how the backup side
-   derives it — a wallet passphrase is recorded as a flag and never used, so
-   this is reproducible without knowing it. That is the whole reason one
-   fingerprint field is enough. */
-function verificationFingerprint(secret, of) {
+async function verificationFingerprint(secret, of) {
   if (of === 'bip39-128' || of === 'bip39-256') {
-    return bip39FromEntropy(secret).then(function (phrase) {
-      return bip39Seed(phrase, '').then(bip32Fingerprint);
-    });
+    return bip32Fingerprint(await bip39Seed(await bip39FromEntropy(secret), ''));
   }
   return bip32Fingerprint(secret);
 }
 
 function refreshSeed() {
-  var token = ++seedToken;
+  const token = ++seedToken;
   if (!allWordsIn()) {
     if (state.secret || state.seedFp || state.seedErr) {
       setState({ secret: null, seedFp: '', seedErr: '' });
     }
     return;
   }
-  readEnteredSeed().then(function (r) {
+  readEnteredSeed().then(async r => {
     if (token !== seedToken) return;
     setState({ secret: r.secret, seedErr: '' });
-    return bip32Fingerprint(r.seed).then(function (f) {
-      if (token === seedToken) setState({ seedFp: f });
-    });
-  }).catch(function (e) {
+    const f = await bip32Fingerprint(r.seed);
+    if (token === seedToken) setState({ seedFp: f });
+  }).catch(e => {
     if (token === seedToken) {
       setState({ secret: null, seedFp: '', seedErr: e.message });
     }
   });
 }
 
-/* ============================================================
-   Render
-   ============================================================ */
-
 function backupSteps() {
   return [
     {
-      title: 'Recovery phrase', note: allWordsIn() ? state.count + ' words entered'
-        : 'Enter your ' + state.count + '-word phrase'
+      title: 'Recovery phrase', note: allWordsIn() ? `${state.count} words entered`
+        : `Enter your ${state.count}-word phrase`
     },
-    { title: 'Split settings', note: state.m + ' of ' + state.n + ' keys' },
-    { title: 'Write to keys', note: state.written.length + ' of ' + state.n + ' written' },
+    { title: 'Split settings', note: `${state.m} of ${state.n} keys` },
+    { title: 'Write to keys', note: `${state.written.length} of ${state.n} written` },
     { title: 'Verify restore', note: 'Required — proves the keys work' },
     { title: 'Store them apart', note: 'Different places, then wipe' }
   ];
@@ -1542,14 +1275,14 @@ function restoreSteps() {
   return [
     {
       title: 'Read your keys', note: state.rRecords.length
-        ? state.rRecords.length + ' of ' + state.rRecords[0].m + ' read' : 'One key at a time'
+        ? `${state.rRecords.length} of ${state.rRecords[0].m} read` : 'One key at a time'
     },
     { title: 'Read your phrase', note: 'Then close the tab' }
   ];
 }
 
 function showPanels() {
-  var v = state.view, s = state.step;
+  const v = state.view, s = state.step;
   show($('#home'), v === 'home');
   show($('#flow'), v !== 'home');
   show($('#p-seed'), v === 'backup' && s === 0);
@@ -1562,11 +1295,11 @@ function showPanels() {
 }
 
 function renderStepper() {
-  var steps = state.view === 'restore' ? restoreSteps() : backupSteps();
+  const steps = state.view === 'restore' ? restoreSteps() : backupSteps();
   setText($('#flow-kicker'), state.view === 'restore' ? 'Restore' : 'Backup');
   setText($('#flow-title'), state.view === 'restore' ? 'Rebuild your seed' : 'Split onto keys');
-  syncList($('#stepper'), 'tpl-step', steps.length, function (el, i) {
-    var done = i < state.step, active = i === state.step;
+  syncList($('#stepper'), 'tpl-step', steps.length, (el, i) => {
+    const done = i < state.step, active = i === state.step;
     el.classList.toggle('is-done', done);
     el.classList.toggle('is-active', active);
     setText($('.step-dot', el), done ? '✓' : String(i + 1));
@@ -1576,15 +1309,15 @@ function renderStepper() {
 }
 
 function renderSeed() {
-  var filled = state.words.filter(function (w) { return w.trim(); }).length;
-  setText($('#word-progress'), filled + ' / ' + state.count + ' words');
+  const filled = state.words.filter(w => w.trim()).length;
+  setText($('#word-progress'), `${filled} / ${state.count} words`);
   setText($('#std-hint'), standardLabel());
   setOn($('#chip12'), state.count === 12);
   setOn($('#chip20'), state.count === 20);
   setOn($('#chip24'), state.count === 24);
-  var grid = $('#wordgrid');
+  const grid = $('#wordgrid');
   grid.classList.toggle('cols-4', state.count === 24);
-  syncList(grid, 'tpl-word', state.count, function (el, i) {
+  syncList(grid, 'tpl-word', state.count, (el, i) => {
     setText($('.word-n', el), String(i + 1));
     setVal($('input', el), state.words[i] || '');
   });
@@ -1592,7 +1325,6 @@ function renderSeed() {
   show($('#decrypt-pass-wrap'), isSlip39() && state.hasPass === true);
   setOn($('#pass-no'), state.hasPass === false);
   setOn($('#pass-yes'), state.hasPass === true);
-  // Answering is required: a restore has no way to work it out later.
   $('#seed-next').disabled = !state.secret || state.hasPass === null;
   setText($('#seed-fp-label'), state.hasPass
     ? 'Wallet fingerprint before passphrase' : 'Wallet fingerprint');
@@ -1609,11 +1341,11 @@ function renderSplit() {
   setVal($('#n-range'), String(state.n));
   $('#m-range').max = String(state.n);
   setVal($('#m-range'), String(state.m));
-  syncList($('#viz'), 'tpl-viz', state.n, function (el, i) {
+  syncList($('#viz'), 'tpl-viz', state.n, (el, i) => {
     el.classList.toggle('is-needed', i < state.m);
     setText($('span', el), '#' + (i + 1));
   });
-  var sentence;
+  let sentence;
   if (state.n === 1) {
     sentence = 'One key holding one share. No splitting — this is a single copy of your seed, and '
       + 'losing that key loses it.';
@@ -1621,42 +1353,40 @@ function renderSplit() {
     sentence = 'Any single key rebuilds your seed on its own — convenient, but one stolen key and '
       + 'its PIN is a stolen wallet.';
   } else {
-    sentence = 'Any ' + state.m + ' of the ' + state.n + ' keys rebuild your seed. Any '
-      + (state.m - 1) + ' reveal nothing at all.';
+    sentence = `Any ${state.m} of the ${state.n} keys rebuild your seed. Any `
+      + `${state.m - 1} reveal nothing at all.`;
   }
   setText($('#split-sentence'), sentence);
-  setText($('#split-note'), 'You will need ' + state.n + ' YubiKeys, one per share. A key cannot '
-    + 'be cloned, so losing more than ' + (state.n - state.m) + ' of them loses the backup. Have '
+  setText($('#split-note'), `You will need ${state.n} YubiKeys, one per share. A key cannot `
+    + `be cloned, so losing more than ${state.n - state.m} of them loses the backup. Have `
     + 'them all to hand before you start.');
-  setText($('#split-next'), state.busy ? 'Splitting…' : 'Split into ' + state.n + ' shares');
+  setText($('#split-next'), state.busy ? 'Splitting…' : `Split into ${state.n} shares`);
   $('#split-next').disabled = state.busy;
 }
 
 function renderWrite() {
   setText($('#pin-note'), 'Chrome will ask you to set a PIN if the key has none, and 0000 is '
     + 'accepted. The PIN is the only thing protecting a share on a key you lose, so a known '
-    + 'default means anyone holding ' + state.m + ' of these keys has your seed. Whichever you '
+    + `default means anyone holding ${state.m} of these keys has your seed. Whichever you `
     + 'pick, write it down: eight wrong attempts wipes a key, and a PIN forgotten across every '
     + 'key cannot be recovered.');
-  syncList($('#enc-rows'), 'tpl-enc-row', state.n, function (el, i) {
-    var done = state.written[i];
-    var active = !done && i === state.written.length;
-    // A credential was registered but its share never stored, so the next press
-    // finishes that one rather than starting over.
-    var resuming = active && !!(pendingCred && pendingCred.i === i);
+  syncList($('#enc-rows'), 'tpl-enc-row', state.n, (el, i) => {
+    const done = state.written[i];
+    const active = !done && i === state.written.length;
+    const resuming = active && !!(pendingCred && pendingCred.i === i);
     el.classList.toggle('is-active', active);
     el.classList.toggle('is-done', !!done);
     setText($('.row-dot', el), done ? '✓' : String(i + 1));
-    setText($('.row-title', el), 'Share ' + (i + 1) + ' of ' + state.n);
+    setText($('.row-title', el), `Share ${i + 1} of ${state.n}`);
     setText($('.row-sub', el), done ? done.label
       : active ? 'Plug in the key for this share' : 'Waiting');
-    var status = $('.status', el);
+    const status = $('.status', el);
     setText(status, done ? 'On the key' : active ? 'Your turn' : 'Not started');
     status.className = 'status ' + (done ? 'ok' : active ? 'active' : 'idle');
     show($('.row-body', el), active);
     show($('.row-done', el), !!done);
     if (active) {
-      var failed = !!state.writeErr;
+      const failed = !!state.writeErr;
       setVal($('.f-label', el), state.keyLabel);
       $('.f-label', el).disabled = resuming;
       $('.f-write', el).disabled = state.busy;
@@ -1670,7 +1400,7 @@ function renderWrite() {
       setText($('.f-hint', el), state.busy ? 'PIN and touch'
         : failed ? ''
           : resuming ? 'This key is already set up — this press only stores the share on it'
-            : 'Share ' + (i + 1) + ' of ' + state.n);
+            : `Share ${i + 1} of ${state.n}`);
       setText($('.f-err', el), state.writeErr);
     }
     if (done) {
@@ -1682,65 +1412,64 @@ function renderWrite() {
 
 function renderReadButton(btn, left) {
   setText($('.btn-label', btn), state.busy ? 'Follow the prompts…'
-    : 'Read a YubiKey' + (left > 0 ? ' (' + left + ' to go)' : ''));
+    : 'Read a YubiKey' + (left > 0 ? ` (${left} to go)` : ''));
   show($('.spinner', btn), state.busy);
   btn.disabled = state.busy;
 }
 
 function renderVerify() {
   setText($('#verify-sub'), 'Unplug each key, plug it back in, and read the share off it. This '
-    + 'proves the write worked while you can still redo it. ' + state.m + ' of the ' + state.n
-    + ' keys are needed.');
-  syncList($('#verify-rows'), 'tpl-read-row', state.vRecords.length, function (el, i) {
-    var r = state.vRecords[i];
-    setText($('.row-title', el), 'Share ' + (r.i + 1) + ' of ' + r.n);
+    + `proves the write worked while you can still redo it. ${state.m} of the ${state.n} `
+    + 'keys are needed.');
+  syncList($('#verify-rows'), 'tpl-read-row', state.vRecords.length, (el, i) => {
+    const r = state.vRecords[i];
+    setText($('.row-title', el), `Share ${r.i + 1} of ${r.n}`);
     setText($('.row-sub', el), r.label);
   });
   renderReadButton($('#verify-btn'), state.m - state.vRecords.length);
-  var msg = $('#verify-msg');
+  const msg = $('#verify-msg');
   setText(msg, state.verifyMsg);
   msg.className = 'result ' + (state.verifyOk ? 'ok' : 'err');
 }
 
 function renderDone() {
-  setText($('#done-badge'), 'Verified — ' + state.m + ' keys rebuilt your seed');
+  setText($('#done-badge'), `Verified — ${state.m} keys rebuilt your seed`);
   setText($('#done-fp-label'), state.hasPass
     ? 'Wallet fingerprint before passphrase' : 'Wallet fingerprint');
   setText($('#done-fp'), state.seedFp);
-  syncList($('#done-grid'), 'tpl-done-card', state.written.length, function (el, i) {
+  syncList($('#done-grid'), 'tpl-done-card', state.written.length, (el, i) => {
     setText($('.done-num', el), '#' + (i + 1));
     setText($('.done-label', el), state.written[i].label);
-    setText($('.done-blob', el), 'Share ' + (i + 1) + ' of ' + state.n + ' — on the key.');
+    setText($('.done-blob', el), `Share ${i + 1} of ${state.n} — on the key.`);
   });
 }
 
 function renderCollect() {
-  syncList($('#collect-rows'), 'tpl-read-row', state.rRecords.length, function (el, i) {
-    var r = state.rRecords[i];
-    setText($('.row-title', el), 'Share ' + (r.i + 1) + ' of ' + r.n);
+  syncList($('#collect-rows'), 'tpl-read-row', state.rRecords.length, (el, i) => {
+    const r = state.rRecords[i];
+    setText($('.row-title', el), `Share ${r.i + 1} of ${r.n}`);
     setText($('.row-sub', el), r.label);
   });
-  var need = state.rRecords.length ? state.rRecords[0].m : null;
+  const need = state.rRecords.length ? state.rRecords[0].m : null;
   renderReadButton($('#read-btn'), need === null ? 0 : need - state.rRecords.length);
   setText($('#collect-hint'), need === null ? ''
-    : 'This backup needs ' + need + ' of ' + state.rRecords[0].n + ' keys.');
+    : `This backup needs ${need} of ${state.rRecords[0].n} keys.`);
   setText($('#read-err'), state.readErr);
   show($('#read-err'), !!state.readErr);
-
 }
 
 function renderRestored() {
-  var words = state.rSeed ? state.rSeed.split(' ') : [];
+  const words = state.rSeed ? state.rSeed.split(' ') : [];
   setText($('#restored-kind'), state.rKind);
   setText($('#restored-passphrase'), state.rHasPass
     ? 'has passphrase' : 'no passphrase');
   setText($('#restored-fp-label'), state.rHasPass
     ? 'wallet fingerprint before passphrase' : 'wallet fingerprint');
   setText($('#restored-fp'), state.rFp);
-  var grid = $('#words-out');
+  const grid = $('#words-out');
   grid.classList.toggle('cols-4', words.length > 12);
   grid.classList.toggle('is-hidden', !state.reveal);
-  syncList(grid, 'tpl-word-out', words.length, function (el, i) {
+  syncList(grid, 'tpl-word-out', words.length, (el, i) => {
     setText($('.word-n', el), String(i + 1));
     setText($('.value', el), words[i]);
   });
@@ -1759,9 +1488,9 @@ function renderRestored() {
 
 function renderEnv() {
   $('#env-banner').innerHTML = state.env.html;
-  var offsite = !runningLocally();
+  const offsite = !runningLocally();
   show($('#dl-banner'), offsite);
-  if (offsite) prepareBundle().catch(function () { });
+  if (offsite) prepareBundle().catch(() => { });
 }
 
 function render() {
@@ -1783,11 +1512,7 @@ function render() {
   }
 }
 
-/* ============================================================
-   Actions
-   ============================================================ */
-
-var DEMO = {
+const DEMO = {
   12: 'legal winner thank year wave sausage worth useful legal winner thank yellow',
   24: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon '
     + 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon '
@@ -1797,170 +1522,139 @@ var DEMO = {
 };
 
 function setCount(n) {
-  setState({ count: n, words: fill(n, ''), inputPass: '',
-    secret: null, seedFp: '', seedErr: '' });
+  setState({
+    count: n, words: Array(n).fill(''), inputPass: '',
+    secret: null, seedFp: '', seedErr: ''
+  });
 }
 
-function doSplit() {
+async function doSplit() {
   if (state.busy || !state.secret) return;
   setState({ busy: true, writeErr: '' });
-  // Always an empty SLIP-39 passphrase: that is what keeps the shares
-  // restorable on a Trezor, which never asks for one.
-  generateShares(state.secret, state.m, state.n, '').then(function (shares) {
-    setState({
-      shares: shares, written: [], busy: false, step: 2, keyLabel: ''
-    });
-  }).catch(function (e) {
+  try {
+    const shares = await generateShares(state.secret, state.m, state.n, '');
+    setState({ shares, written: [], busy: false, step: 2, keyLabel: '' });
+  } catch (e) {
     setState({ busy: false, seedErr: e.message });
-  });
+  }
 }
 
-
-
-/* One press: create the credential, then write the blob in the same gesture. That
-   pairing is the only sequence proven to work — see writeShareToKey(). */
-function doWrite() {
+async function doWrite() {
   if (state.busy) return;
-  var i = state.written.length;
+  const i = state.written.length;
   if (i >= state.n) return;
-  var label = state.keyLabel.trim() || 'YubiKey ' + (i + 1);
+  const label = state.keyLabel.trim() || `YubiKey ${i + 1}`;
   setState({ busy: true, writeErr: '' });
-  writeShareToKey({
-    share: state.shares[i], of: originKind(), rp: rpId(),
-    n: state.n, m: state.m, i: i, label: label,
-    fp: state.seedFp, hasPass: !!state.hasPass,
-    created: new Date().toISOString().slice(0, 10)
-  }).then(function () {
-    setState({
-      written: state.written.concat([{ label: label }]),
-      busy: false, keyLabel: ''
+  try {
+    await writeShareToKey({
+      share: state.shares[i], of: originKind(), rp: rpId(),
+      n: state.n, m: state.m, i, label,
+      fp: state.seedFp, hasPass: !!state.hasPass,
+      created: new Date().toISOString().slice(0, 10)
     });
-  }).catch(function (e) {
-    // InvalidStateError means the authenticator refused because this key already
-    // holds a credential from this backup — the one duplicate check that works
-    // without reading the key first.
+    setState({ written: [...state.written, { label }], busy: false, keyLabel: '' });
+  } catch (e) {
     setState({ busy: false, writeErr: e.message });
-  });
+  }
 }
 
-function doVerifyRead() {
+async function doVerifyRead() {
   if (state.busy) return;
   setState({ busy: true, verifyMsg: '', verifyOk: null });
-  readShareFromKey().then(function (rec) {
-    if (state.vRecords.some(function (r) { return r.i === rec.i; })) {
+  try {
+    const rec = await readShareFromKey();
+    if (state.vRecords.some(r => r.i === rec.i)) {
       throw new Error('That key has already been read — try a different one.');
     }
-    var recs = state.vRecords.concat([rec]);
+    const recs = [...state.vRecords, rec];
     if (recs.length < state.m) {
       setState({ vRecords: recs, busy: false });
-      return null;
+      return;
     }
-    return combineMnemonics(recs.map(function (r) { return r.share; }), '').then(function (secret) {
-      if (bytesToHex(secret) !== bytesToHex(state.secret)) {
-        throw new Error('Those keys rebuild a different secret. Do not rely on this backup.');
-      }
-      setState({
-        vRecords: recs, busy: false, verifyOk: true, step: 4,
-        verifyMsg: 'Verified — moving on'
-      });
+    const secret = await combineMnemonics(recs.map(r => r.share), '');
+    if (secret.toHex() !== state.secret.toHex()) {
+      throw new Error('Those keys rebuild a different secret. Do not rely on this backup.');
+    }
+    setState({
+      vRecords: recs, busy: false, verifyOk: true, step: 4,
+      verifyMsg: 'Verified — moving on'
     });
-  }).catch(function (e) {
+  } catch (e) {
     setState({ busy: false, verifyOk: false, verifyMsg: e.message });
-  });
+  }
 }
 
-/* Turn a recovered master secret back into something a wallet accepts. The
-   share record says which standard it came from; a pasted share does not, so
-   both encodings are offered. */
-function presentSecret(secret, of, recordedFp) {
+async function presentSecret(secret, of, recordedFp) {
   if (of === 'bip39-128' || of === 'bip39-256') {
-    return bip39FromEntropy(secret).then(function (phrase) {
-      return {
-        text: phrase, kind: 'BIP-39 · ' + phrase.split(' ').length + ' words',
-        fp: recordedFp, alt: ''
-      };
-    });
-  }
-  return generateShares(secret, 1, 1, '').then(function (one) {
-    var out = {
-      text: one[0], kind: 'SLIP-39 · ' + one[0].split(' ').length + ' words',
+    const phrase = await bip39FromEntropy(secret);
+    return {
+      text: phrase, kind: `BIP-39 · ${phrase.split(' ').length} words`,
       fp: recordedFp, alt: ''
     };
-    if (of) return out;
-    // Pasted shares carry no origin marker, so say what the other reading is.
-    return bip39FromEntropy(secret).then(function (phrase) {
-      out.kind = 'SLIP-39 · ' + one[0].split(' ').length + ' words (origin not recorded)';
-      out.alt = 'If this backup was made from a BIP-39 phrase, the same bytes are: ' + phrase;
-      return out;
-    }, function () { return out; });
+  }
+  const [one] = await generateShares(secret, 1, 1, '');
+  const out = {
+    text: one, kind: `SLIP-39 · ${one.split(' ').length} words`,
+    fp: recordedFp, alt: ''
+  };
+  if (of) return out;
+  try {
+    const phrase = await bip39FromEntropy(secret);
+    out.kind = `SLIP-39 · ${one.split(' ').length} words (origin not recorded)`;
+    out.alt = `If this backup was made from a BIP-39 phrase, the same bytes are: ${phrase}`;
+  } catch { }
+  return out;
+}
+
+async function finishRestore(mnemonics, of, recordedFp, hasPass) {
+  const recovered = await combineMnemonics(mnemonics, '');
+  let checked = false;
+  if (recordedFp) {
+    const f = await verificationFingerprint(recovered, of);
+    if (f !== recordedFp) {
+      throw new Error('These shares rebuild a different wallet than the one that was backed '
+        + `up — got ${f}, the keys record ${recordedFp}. Do not use this result.`);
+    }
+    checked = true;
+  }
+  const r = await presentSecret(recovered, of, recordedFp);
+  if (checked) r.kind += ' · fingerprint verified';
+  if (!r.fp) r.fp = await verificationFingerprint(recovered, of);
+  setState({
+    rSeed: r.text, rKind: r.kind, rFp: r.fp, rAlt: r.alt, rHasPass: !!hasPass,
+    busy: false, step: 1, reveal: false, readErr: ''
   });
 }
 
-function finishRestore(mnemonics, of, recordedFp, hasPass) {
-  var recovered;
-  return combineMnemonics(mnemonics, '').then(function (secret) {
-    recovered = secret;
-    // The stored fingerprint is always derived with an empty passphrase, so it
-    // can always be recomputed here. A mismatch means the recovered bytes are
-    // not the ones that were backed up — worth stopping for, on top of the
-    // per-share checksum and SLIP-39's own digest share.
-    if (!recordedFp) return null;
-    return verificationFingerprint(secret, of).then(function (f) {
-      if (f !== recordedFp) {
-        throw new Error('These shares rebuild a different wallet than the one that was backed '
-          + 'up — got ' + f + ', the keys record ' + recordedFp + '. Do not use this result.');
-      }
-      return true;
-    });
-  }).then(function (checked) {
-    return presentSecret(recovered, of, recordedFp).then(function (r) {
-      if (checked) r.kind += ' · fingerprint verified';
-      return r;
-    });
-  }).then(function (r) {
-    // A pasted share carries no record, so derive something to show.
-    if (r.fp) return r;
-    return verificationFingerprint(recovered, of).then(function (f) { r.fp = f; return r; });
-  }).then(function (r) {
-    setState({
-      rSeed: r.text, rKind: r.kind, rFp: r.fp, rAlt: r.alt, rHasPass: !!hasPass,
-      busy: false, step: 1, reveal: false, readErr: ''
-    });
-  });
-}
-
-function doRestoreRead() {
+async function doRestoreRead() {
   if (state.busy) return;
   setState({ busy: true, readErr: '' });
-  readShareFromKey().then(function (rec) {
-    if (state.rRecords.some(function (r) { return r.i === rec.i; })) {
+  try {
+    const rec = await readShareFromKey();
+    if (state.rRecords.some(r => r.i === rec.i)) {
       throw new Error('That key has already been read — try a different one.');
     }
-    // Catch a key from a different backup here, where we can name the
-    // problem, rather than letting it surface as a checksum failure later.
-    var first = state.rRecords[0];
+    const first = state.rRecords[0];
     if (first && (rec.fp !== first.fp || rec.n !== first.n || rec.m !== first.m)) {
-      throw new Error('That key belongs to a different backup (' + rec.fp + ', not '
-        + first.fp + ').');
+      throw new Error(`That key belongs to a different backup (${rec.fp}, not ${first.fp}).`);
     }
-    var recs = state.rRecords.concat([rec]);
+    const recs = [...state.rRecords, rec];
     if (recs.length < recs[0].m) {
       setState({ rRecords: recs, busy: false });
-      return null;
+      return;
     }
     setState({ rRecords: recs });
-    return finishRestore(recs.map(function (r) { return r.share; }),
-      recs[0].of, recs[0].fp, recs[0].hasPass);
-  }).catch(function (e) {
+    await finishRestore(recs.map(r => r.share), recs[0].of, recs[0].fp, recs[0].hasPass);
+  } catch (e) {
     setState({ busy: false, readErr: e.message });
-  });
+  }
 }
 
 function wipe() {
   enrolledIds = [];
   pendingCred = null;
   setState({
-    view: 'home', step: 0, count: 12, words: fill(12, ''), inputPass: '',
+    view: 'home', step: 0, count: 12, words: Array(12).fill(''), inputPass: '',
     secret: null, seedFp: '', seedErr: '', hasPass: null, n: 5, m: 3, shares: [],
     written: [], keyLabel: '', busy: false, writeErr: '',
     urlCopied: false,
@@ -1971,108 +1665,96 @@ function wipe() {
   });
 }
 
-var CLICKS = {
-  home: function () { setState({ view: 'home' }); },
+const CLICKS = {
+  home: () => setState({ view: 'home' }),
   'download-bundle': downloadBundle,
-  theme: function () { setState({ dark: !state.dark }); },
-  backup: function () { setState({ view: 'backup', step: 0 }); },
-  restore: function () { setState({ view: 'restore', step: 0 }); },
-  back: function () { setState({ step: Math.max(0, state.step - 1) }); },
-  count12: function () { setCount(12); },
-  count20: function () { setCount(20); },
-  count24: function () { setCount(24); },
-  'pass-no': function () {
+  theme: () => setState({ dark: !state.dark }),
+  backup: () => setState({ view: 'backup', step: 0 }),
+  restore: () => setState({ view: 'restore', step: 0 }),
+  back: () => setState({ step: Math.max(0, state.step - 1) }),
+  count12: () => setCount(12),
+  count20: () => setCount(20),
+  count24: () => setCount(24),
+  'pass-no': () => {
     setState({ hasPass: false, inputPass: '' });
     refreshSeed();
   },
-  'pass-yes': function () { setState({ hasPass: true }); },
-  demo: function () {
+  'pass-yes': () => setState({ hasPass: true }),
+  demo: () => {
     setState({ words: DEMO[state.count].split(' '), hasPass: false });
     refreshSeed();
   },
-  'seed-next': function () {
+  'seed-next': () => {
     if (state.secret && state.hasPass !== null) setState({ step: 1 });
   },
   'split-next': doSplit,
-  'copy-keys-url': function () {
-    copyText(KEYS_SETTINGS_URL).then(function (ok) {
-      setState({ urlCopied: ok });
-      setTimeout(function () { setState({ urlCopied: false }); }, 1600);
-    });
+  'copy-keys-url': async () => {
+    const ok = await copyText(KEYS_SETTINGS_URL);
+    setState({ urlCopied: ok });
+    setTimeout(() => setState({ urlCopied: false }), 1600);
   },
   'write-key': doWrite,
-  'to-verify': function () {
-    setState({ step: 3, vRecords: [], verifyMsg: '', verifyOk: null });
-  },
+  'to-verify': () => setState({ step: 3, vRecords: [], verifyMsg: '', verifyOk: null }),
   'verify-read': doVerifyRead,
   'read-key': doRestoreRead,
-  wipe: wipe,
-  reveal: function () { setState({ reveal: !state.reveal }); },
-  'copy-seed': function () {
-    copyText(state.rSeed).then(function (ok) {
-      setState({ seedCopied: ok });
-      setTimeout(function () { setState({ seedCopied: false }); }, 1400);
-    });
+  wipe,
+  reveal: () => setState({ reveal: !state.reveal }),
+  'copy-seed': async () => {
+    const ok = await copyText(state.rSeed);
+    setState({ seedCopied: ok });
+    setTimeout(() => setState({ seedCopied: false }), 1400);
   }
 };
 
-var INPUTS = {
-  word: function (i, v) {
-    var w = state.words.slice();
+const INPUTS = {
+  word: (i, v) => {
+    const w = [...state.words];
     w[i] = v;
     setState({ words: w });
     refreshSeed();
   },
-  inputpass: function (i, v) { setState({ inputPass: v }); refreshSeed(); },
-  n: function (i, v) {
-    var n = +v;
-    setState({ n: n, m: Math.min(state.m, n) });
+  inputpass: (i, v) => { setState({ inputPass: v }); refreshSeed(); },
+  n: (i, v) => {
+    const n = +v;
+    setState({ n, m: Math.min(state.m, n) });
   },
-  m: function (i, v) { setState({ m: Math.min(+v, state.n) }); },
-  keylabel: function (i, v) { setState({ keyLabel: v }); },
+  m: (i, v) => setState({ m: Math.min(+v, state.n) }),
+  keylabel: (i, v) => setState({ keyLabel: v })
 };
 
-/* ============================================================
-   Wiring
-   ============================================================ */
-
 function indexOf(el) {
-  var row = el.closest('[data-i]');
+  const row = el.closest('[data-i]');
   return row ? +row.dataset.i : -1;
 }
 
-document.addEventListener('click', function (e) {
-  var t = e.target.closest('[data-act]');
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]');
   if (!t || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
-  var fn = CLICKS[t.dataset.act];
+  const fn = CLICKS[t.dataset.act];
   if (!fn) return;
   if (t.tagName === 'A') e.preventDefault();
   fn(indexOf(t));
 });
 
-document.addEventListener('input', function (e) {
-  var t = e.target.closest('[data-act]');
+document.addEventListener('input', e => {
+  const t = e.target.closest('[data-act]');
   if (!t) return;
-  var fn = INPUTS[t.dataset.act];
+  const fn = INPUTS[t.dataset.act];
   if (fn) fn(indexOf(t), t.value);
 });
 
-// A pasted phrase fills the whole grid and picks the word count for you.
-document.addEventListener('paste', function (e) {
-  var t = e.target.closest('[data-act="word"]');
+document.addEventListener('paste', e => {
+  const t = e.target.closest('[data-act="word"]');
   if (!t) return;
-  var text = (e.clipboardData || window.clipboardData).getData('text') || '';
-  var parts = text.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+  const text = e.clipboardData.getData('text') || '';
+  const parts = text.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
   if (parts.length < 2) return;
   e.preventDefault();
-  // Only the three supported lengths; anything else keeps the current grid so
-  // the user sees their words rather than a silently truncated phrase.
-  var count = parts.length === 12 || parts.length === 20 || parts.length === 24
-    ? parts.length : state.count;
-  var w = fill(count, '');
-  parts.slice(0, count).forEach(function (p, k) { w[k] = p; });
+  const count = [12, 20, 24].includes(parts.length) ? parts.length : state.count;
+  const w = Array(count).fill('');
+  parts.slice(0, count).forEach((p, k) => { w[k] = p; });
   t.blur();
-  setState({ count: count, words: w });
+  setState({ count, words: w });
   refreshSeed();
 });
 
