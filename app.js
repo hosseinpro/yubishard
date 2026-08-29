@@ -1394,6 +1394,7 @@ function renderRestored() {
 function renderEnv() {
   $('#env-banner').innerHTML = state.env.html;
   show($('#dl-banner'), !runningLocally());
+  for (const b of document.querySelectorAll('.cta-row .btn')) b.disabled = !state.env.ok;
 }
 
 function render() {

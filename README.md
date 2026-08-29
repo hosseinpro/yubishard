@@ -291,8 +291,6 @@ Privately, please — see [SECURITY.md](SECURITY.md) for the route and what is i
 ## Todo
 
 - [ ] Record a demo GIF of a backup and put it at the top of this README.
-- [ ] Disable the action buttons when served at `127.0.0.1`, where WebAuthn cannot work — today
-      only the banner warns.
 - [ ] Publish proper GitHub Releases with notes instead of bare tags.
 - [ ] Fill in repo metadata: description, topics (`slip39`, `shamir-secret-sharing`, `yubikey`,
       `webauthn`, `seed-phrase`), social-preview image.
