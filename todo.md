@@ -1,4 +1,5 @@
-add version to github and show that in the yubishard bottom bar left.
+
+when it is on 127.0.0.1 make the buttons disable
 
 how to promote this open source yubishard repo?
 

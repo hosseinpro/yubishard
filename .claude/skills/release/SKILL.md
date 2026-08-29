@@ -22,15 +22,25 @@ an existing tag.
    `origin/main`. Uncommitted work does not silently ride along in a release — stop and ask if
    the tree is dirty.
 
-2. **Bump the footer.** In `index.html`, the footer's left span holds the version link:
+2. **Bump the version in `index.html`.** It appears in exactly two places; update both to the
+   same new version:
 
-   ```html
-   <span><a href="https://github.com/hosseinpro/yubishard/releases/tag/vX.Y.Z" target="_blank"
-       rel="noopener">vX.Y.Z</a></span>
-   ```
+   - The footer's left span — both the link text and the tag name in the href:
 
-   Update **both** the link text and the tag name at the end of the href to the new version.
-   They must match — a mismatched pair points users at the wrong tag.
+     ```html
+     <span><a href="https://github.com/hosseinpro/yubishard/releases/tag/vX.Y.Z" target="_blank"
+         rel="noopener">YubiShard vX.Y.Z</a></span>
+     ```
+
+   - The download strip's link in `#dl-banner`, which points at GitHub's auto-generated source
+     archive for the tag:
+
+     ```html
+     <a href="https://github.com/hosseinpro/yubishard/archive/refs/tags/vX.Y.Z.zip">Download →</a>
+     ```
+
+   A `grep -n vX.Y.Z index.html` for the *old* version afterward must come back empty — a
+   leftover pins users to a stale download.
 
 3. **Commit, tag, push.** Tag the commit that contains the bump, so the tagged tree shows its
    own version:

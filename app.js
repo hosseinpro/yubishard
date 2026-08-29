@@ -1093,141 +1093,6 @@ function syncList(container, tplId, count, update) {
   }
 }
 
-/* ZIP bundle for the download strip — browsers have no native ZIP writer */
-
-const BUNDLE_FILES = [
-  { name: 'index.html', mode: 0o644 },
-  { name: 'styles.css', mode: 0o644 },
-  { name: 'app.js', mode: 0o644 },
-  { name: 'serve.command', mode: 0o755 },
-  { name: 'serve.bat', mode: 0o644 }
-];
-
-const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, i) => {
-  let c = i;
-  for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-  return c >>> 0;
-});
-
-function crc32(bytes) {
-  let c = 0xffffffff;
-  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-async function deflate(bytes) {
-  if (typeof CompressionStream !== 'function') return { method: 0, data: bytes };
-  try {
-    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
-    return { method: 8, data: await new Response(stream).bytes() };
-  } catch {
-    return { method: 0, data: bytes };
-  }
-}
-
-function dosTime(d) {
-  return ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff;
-}
-
-function dosDate(d) {
-  return (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff;
-}
-
-function buildZip(entries) {
-  const now = new Date(), time = dosTime(now), date = dosDate(now);
-  const chunks = [], central = [];
-  let offset = 0;
-
-  for (const e of entries) {
-    const name = utf8.encode(e.name);
-    const local = new Uint8Array(30 + name.length);
-    const dv = new DataView(local.buffer);
-    dv.setUint32(0, 0x04034b50, true);
-    dv.setUint16(4, 20, true);
-    dv.setUint16(6, 0, true);
-    dv.setUint16(8, e.method, true);
-    dv.setUint16(10, time, true);
-    dv.setUint16(12, date, true);
-    dv.setUint32(14, e.crc, true);
-    dv.setUint32(18, e.data.length, true);
-    dv.setUint32(22, e.raw, true);
-    dv.setUint16(26, name.length, true);
-    local.set(name, 30);
-    chunks.push(local, e.data);
-
-    const cd = new Uint8Array(46 + name.length);
-    const cv = new DataView(cd.buffer);
-    cv.setUint32(0, 0x02014b50, true);
-    cv.setUint16(4, 0x031e, true);
-    cv.setUint16(6, 20, true);
-    cv.setUint16(10, e.method, true);
-    cv.setUint16(12, time, true);
-    cv.setUint16(14, date, true);
-    cv.setUint32(16, e.crc, true);
-    cv.setUint32(20, e.data.length, true);
-    cv.setUint32(24, e.raw, true);
-    cv.setUint16(28, name.length, true);
-    cv.setUint32(38, (e.mode & 0xffff) << 16, true);
-    cv.setUint32(42, offset, true);
-    cd.set(name, 46);
-    central.push(cd);
-
-    offset += local.length + e.data.length;
-  }
-
-  const cdSize = central.reduce((n, c) => n + c.length, 0);
-  const end = new Uint8Array(22);
-  const ev = new DataView(end.buffer);
-  ev.setUint32(0, 0x06054b50, true);
-  ev.setUint16(8, entries.length, true);
-  ev.setUint16(10, entries.length, true);
-  ev.setUint32(12, cdSize, true);
-  ev.setUint32(16, offset, true);
-
-  return new Blob([...chunks, ...central, end], { type: 'application/zip' });
-}
-
-let bundleUrl = null, bundlePending = null;
-
-function prepareBundle() {
-  if (bundleUrl) return Promise.resolve(bundleUrl);
-  if (bundlePending) return bundlePending;
-  bundlePending = Promise.all(BUNDLE_FILES.map(async f => {
-    const r = await fetch(f.name);
-    if (!r.ok) throw new Error(`${f.name} — ${r.status}`);
-    const bytes = await r.bytes();
-    const z = await deflate(bytes);
-    return {
-      name: f.name, mode: f.mode, raw: bytes.length,
-      crc: crc32(bytes), method: z.method, data: z.data
-    };
-  })).then(entries => {
-    bundleUrl = URL.createObjectURL(buildZip(entries));
-    const a = $('#dl-link');
-    if (a) {
-      a.href = bundleUrl;
-      a.download = 'yubishard.zip';
-      a.removeAttribute('data-act');
-    }
-    return bundleUrl;
-  }).catch(e => {
-    bundlePending = null;
-    throw e;
-  });
-  return bundlePending;
-}
-
-function downloadBundle() {
-  prepareBundle().then(url => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'yubishard.zip';
-    a.click();
-  }).catch(e => {
-    window.alert('Could not build the download: ' + e.message);
-  });
-}
-
 /* Clipboard */
 
 function legacyCopy(text) {
@@ -1528,9 +1393,7 @@ function renderRestored() {
 
 function renderEnv() {
   $('#env-banner').innerHTML = state.env.html;
-  const offsite = !runningLocally();
-  show($('#dl-banner'), offsite);
-  if (offsite) prepareBundle().catch(() => { });
+  show($('#dl-banner'), !runningLocally());
 }
 
 function render() {
@@ -1718,7 +1581,6 @@ function wipe() {
 
 const CLICKS = {
   home: () => setState({ view: 'home' }),
-  'download-bundle': downloadBundle,
   theme: () => setState({ dark: !state.dark }),
   backup: () => setState({ view: 'backup', step: 0 }),
   restore: () => setState({ view: 'restore', step: 0 }),
