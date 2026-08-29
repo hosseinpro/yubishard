@@ -284,9 +284,12 @@ primitives are implemented by hand because Chrome has no native for them:
 
 The first two exist only to compute the BIP-32 fingerprint. The last two are the product.
 
+## Reporting a vulnerability
+
+Privately, please — see [SECURITY.md](SECURITY.md) for the route and what is in scope.
+
 ## Todo
 
-- [ ] Add a `SECURITY.md` with a vulnerability reporting route.
 - [ ] Record a demo GIF of a backup and put it at the top of this README.
 - [ ] Disable the action buttons when served at `127.0.0.1`, where WebAuthn cannot work — today
       only the banner warns.
