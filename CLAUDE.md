@@ -18,6 +18,13 @@ Three hand-written files, no dependencies, no framework, no build step:
 `serve.command` and `serve.bat` only exist to put them behind an origin. They are plain `<link>` and
 `<script src>` references — nothing bundles or transforms them, so what ships is what you edit.
 
+## Ground rules
+
+**Nothing merges or lands on `main` until Hossein has reviewed it, and nothing is released until he
+says "release" explicitly.** Being asked to commit is not permission to push; being asked to push is
+not permission to release. A release — the version bump, the tag, anything under
+`.claude/skills/release` — happens only on an explicit instruction naming it.
+
 ## Running it
 
 **`file://` does not work and cannot be made to work.** WebAuthn derives its relying-party ID from
