@@ -87,10 +87,13 @@ Every screen exists in the DOM at all times and is toggled with `hidden`. Naviga
 
 ## Conventions that matter
 
-**Do not add comments to the code.** No block headers, no explanatory comments, no inline notes —
-write code that reads without them. Anything that genuinely needs explaining belongs in this file or
-in README.md, where it will still be found years from now by someone who is not reading the source.
-This applies to new code and to code you are editing.
+**One-line section markers only; no other comments.** `app.js` carries a single-line `/* … */`
+marker at the top of each section so the file can be navigated and each block's reason to exist is
+visible at a glance — keep them, and give any new section one. Everything else stays comment-free:
+no explanatory comments, no inline notes — write code that reads without them. Anything that
+genuinely needs explaining belongs in this file or in README.md, where it will still be found years
+from now by someone who is not reading the source. `index.html` and `styles.css` policies are
+unchanged (none, and section headers respectively).
 
 **State is one flat object.** `setState(patch)` merges and calls `render()`. `render()` writes to the
 DOM rather than returning anything; it dispatches to one `renderX()` per panel.

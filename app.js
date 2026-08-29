@@ -1,5 +1,7 @@
 'use strict';
 
+/* Wordlists: SLIP-39 (1024) and BIP-39 English (2048) */
+
 const SLIP39_WORDS = (
   'academic,acid,acne,acquire,acrobat,activity,actress,adapt,adequate,adjust,admit,adorn,' +
   'adult,advance,advocate,afraid,again,agency,agree,aide,aircraft,airline,airport,ajar,' +
@@ -263,6 +265,8 @@ const BIP39_WORDS = (
   'yellow,you,young,youth,zebra,zero,zone,zoo'
 ).split(',');
 
+/* Byte helpers */
+
 function concatBytes(...arrays) {
   const out = new Uint8Array(arrays.reduce((n, a) => n + a.length, 0));
   let at = 0;
@@ -280,6 +284,8 @@ function randomBytes(n) {
 
 const utf8 = new TextEncoder();
 
+/* WebCrypto wrappers */
+
 async function sha256(data) {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', data));
 }
@@ -294,6 +300,8 @@ async function pbkdf2(hash, password, salt, iterations, dkLen) {
   return new Uint8Array(await crypto.subtle.deriveBits(
     { name: 'PBKDF2', hash, salt, iterations }, k, dkLen * 8));
 }
+
+/* RIPEMD-160 — not in WebCrypto; exists only for the BIP-32 master fingerprint */
 
 const RMD_ZL = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -369,6 +377,8 @@ function ripemd160(msg) {
   return out;
 }
 
+/* secp256k1 base-point multiply — not in WebCrypto; exists only for the BIP-32 master fingerprint */
+
 const P256K = BigInt('0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
 const GX = BigInt('0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');
 const GY = BigInt('0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8');
@@ -435,6 +445,8 @@ async function bip32Fingerprint(seed) {
   return ripemd160(h).subarray(0, 4).toHex().toUpperCase();
 }
 
+/* GF(256) and Lagrange interpolation — the Shamir arithmetic */
+
 const EXP = new Uint8Array(255), LOG = new Uint8Array(256);
 {
   let poly = 1;
@@ -468,6 +480,8 @@ function interpolate(shares, x) {
   return out;
 }
 
+/* RS1024 — the SLIP-39 mnemonic checksum */
+
 const RS_GEN = [
   0xe0e040, 0x1c1c080, 0x3838100, 0x7070200, 0xe0e0009,
   0x1c0c2412, 0x38086c24, 0x3090fc48, 0x21b1f890, 0x3f3f120];
@@ -497,6 +511,8 @@ function rs1024Checksum(data, ext) {
 function rs1024Verify(data, ext) {
   return rs1024Polymod(customizationValues(ext).concat(data)) === 1;
 }
+
+/* SLIP-39 mnemonic encoding and decoding */
 
 const METADATA_WORDS = 7;
 const DIGEST_INDEX = 254;
@@ -583,6 +599,8 @@ function decodeMnemonic(mnemonic) {
   return out;
 }
 
+/* SLIP-39 master-secret encryption — four-round Feistel over PBKDF2 */
+
 function encryptionSalt(id, ext) {
   if (ext) return new Uint8Array(0);
   return concatBytes(utf8.encode(CS_NON_EXTENDABLE), new Uint8Array([id >> 8, id & 0xff]));
@@ -615,6 +633,8 @@ function encryptMasterSecret(secret, passphrase, e, id, ext) {
 function decryptMasterSecret(ems, passphrase, e, id, ext) {
   return feistel(ems, passphrase, e, id, ext, false);
 }
+
+/* Shamir split and recover */
 
 async function createDigest(randomPart, sharedSecret) {
   return (await hmac('SHA-256', randomPart, sharedSecret)).subarray(0, DIGEST_BYTES);
@@ -654,6 +674,8 @@ async function recoverSecret(threshold, shares) {
   }
   return secret;
 }
+
+/* SLIP-39 public API — single group, threshold of count */
 
 async function generateShares(secret, threshold, count, passphrase, e = 1) {
   if (secret.length < 16 || secret.length % 2 !== 0) {
@@ -720,6 +742,8 @@ async function combineMnemonics(mnemonics, passphrase) {
   return decryptMasterSecret(ems, pass, first.e, first.id, first.ext);
 }
 
+/* BIP-39 */
+
 async function bip39ToEntropy(phrase) {
   const words = String(phrase).toLowerCase().trim().split(/\s+/).filter(Boolean);
   if (![12, 15, 18, 21, 24].includes(words.length)) {
@@ -768,6 +792,8 @@ function bip39Seed(phrase, passphrase) {
   const salt = ('mnemonic' + String(passphrase || '')).normalize('NFKD');
   return pbkdf2('SHA-512', utf8.encode(norm), utf8.encode(salt), 2048, 64);
 }
+
+/* WebAuthn largeBlob — the browser-only half of the file starts here */
 
 const RECORD_VERSION = 1;
 
@@ -935,6 +961,8 @@ async function readShareFromKey() {
   }
 }
 
+/* Environment checks */
+
 function localhostUrl() {
   return `${location.protocol}//localhost${location.port ? ':' + location.port : ''}`
     + location.pathname + location.search;
@@ -988,6 +1016,8 @@ function envReport() {
   return { ok: true, html: parts.join(' ') };
 }
 
+/* State */
+
 const state = {
   dark: false, view: 'home', step: 0,
 
@@ -1029,6 +1059,8 @@ function originKind() {
   return state.count === 12 ? 'bip39-128' : 'bip39-256';
 }
 
+/* DOM helpers */
+
 function $(sel, root) { return (root || document).querySelector(sel); }
 
 function setText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
@@ -1060,6 +1092,8 @@ function syncList(container, tplId, count, update) {
     update(el, i);
   }
 }
+
+/* ZIP bundle for the download strip — browsers have no native ZIP writer */
 
 const BUNDLE_FILES = [
   { name: 'index.html', mode: 0o644 },
@@ -1194,6 +1228,8 @@ function downloadBundle() {
   });
 }
 
+/* Clipboard */
+
 function legacyCopy(text) {
   const ta = document.createElement('textarea');
   ta.value = text;
@@ -1217,6 +1253,8 @@ async function copyText(text) {
   }
   return legacyCopy(text);
 }
+
+/* Reading the entered phrase */
 
 let seedToken = 0;
 
@@ -1257,6 +1295,8 @@ function refreshSeed() {
     }
   });
 }
+
+/* Render */
 
 function backupSteps() {
   return [
@@ -1512,6 +1552,8 @@ function render() {
   }
 }
 
+/* Actions */
+
 const DEMO = {
   12: 'legal winner thank year wave sausage worth useful legal winner thank yellow',
   24: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon '
@@ -1721,6 +1763,8 @@ const INPUTS = {
   m: (i, v) => setState({ m: Math.min(+v, state.n) }),
   keylabel: (i, v) => setState({ keyLabel: v })
 };
+
+/* Event wiring */
 
 function indexOf(el) {
   const row = el.closest('[data-i]');
