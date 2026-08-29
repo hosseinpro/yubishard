@@ -52,10 +52,26 @@ an existing tag.
    git push origin main vX.Y.Z
    ```
 
-4. **GitHub release (optional).** Only if the user asked for release notes or a "proper
-   release": `gh release create vX.Y.Z --generate-notes`. A bare tag is the default — the
-   footer link resolves either way.
+4. **Publish the release.** A bare tag is not a release — the footer links every user to
+   `/releases/tag/vX.Y.Z`, and that page must explain what they are running:
+
+   ```
+   gh release create vX.Y.Z --title "vX.Y.Z — <short summary>" --notes-file <file> --latest
+   ```
+
+   Write the notes; do not lean on `--generate-notes`, which has nothing to work from in a repo
+   that does not use pull requests. Read `git log <previous-tag>..vX.Y.Z` and write for the
+   person deciding whether to upgrade a wallet backup tool:
+
+   - Lead with whether anything already written to a key is affected. If shares from the
+     previous version still restore identically, say so in the first line.
+   - Then what changed, in user terms — the effect, not the commit subjects.
+   - Anything that changes the requirements (Chrome, firmware) or the restore path belongs up
+     top, not in a list at the bottom.
+
+   Match the tone of the existing releases and of README.md — plain sentences, no emoji, no
+   "🎉 What's Changed".
 
 ## Report
 
-State the new version, the commit hash, and confirm the tag is on GitHub.
+State the new version, the commit hash, and the release URL.
