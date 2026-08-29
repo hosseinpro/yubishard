@@ -290,11 +290,6 @@ The first two exist only to compute the BIP-32 fingerprint. The last two are the
 
 Privately, please — see [SECURITY.md](SECURITY.md) for the route and what is in scope.
 
-## Todo
-
-- [ ] Record a demo GIF of a backup and put it at the top of this README.
-- [ ] Spread the word once the above trust signals are in place.
-
 ## Further reading
 
 **SLIP-39 / Shamir backup**
