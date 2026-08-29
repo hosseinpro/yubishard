@@ -269,6 +269,18 @@ Three hand-written files — `index.html`, `styles.css` and `app.js` — with no
 build step. Nothing bundles or transforms them, so what ships is what you edit. See
 `CLAUDE.md` for the internals and how to run the SLIP-39 test vectors.
 
+All hashing — SHA-256, SHA-512, HMAC, PBKDF2 — comes from the browser's own `crypto.subtle`. Four
+primitives are implemented by hand because Chrome has no native for them:
+
+| Section | ~Lines | Why it can't be a Chrome native |
+|---|---|---|
+| RIPEMD-160 | 75 | WebCrypto only ships SHA-family hashes |
+| secp256k1 | 70 | WebCrypto has P-256, not Bitcoin's K-256; does base-point multiply only |
+| GF(256) + interpolate | 35 | The Shamir field math; no native |
+| RS1024 | 30 | SLIP-39's bespoke checksum |
+
+The first two exist only to compute the BIP-32 fingerprint. The last two are the product.
+
 ## Further reading
 
 **SLIP-39 / Shamir backup**
