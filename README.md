@@ -1,6 +1,6 @@
 # yubishard
 
-![Split a wallet seed across YubiKeys — a recovery phrase splitting into three shares, one per key](.github/social-card.png)
+![A backup being made: entering a 12-word phrase, choosing a 3-of-5 split, then labelling the first key before writing its share](.github/demo.gif)
 
 [![tests](https://github.com/hosseinpro/yubishard/actions/workflows/test.yml/badge.svg)](https://github.com/hosseinpro/yubishard/actions/workflows/test.yml)
 
