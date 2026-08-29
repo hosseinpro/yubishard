@@ -1257,6 +1257,11 @@ function setVal(el, v) {
 
 function show(el, on) { if (el) el.hidden = !on; }
 
+function setOn(el, on) {
+  el.classList.toggle('is-on', on);
+  el.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
 function esc(t) {
   return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -1574,9 +1579,9 @@ function renderSeed() {
   var filled = state.words.filter(function (w) { return w.trim(); }).length;
   setText($('#word-progress'), filled + ' / ' + state.count + ' words');
   setText($('#std-hint'), standardLabel());
-  $('#chip12').classList.toggle('is-on', state.count === 12);
-  $('#chip20').classList.toggle('is-on', state.count === 20);
-  $('#chip24').classList.toggle('is-on', state.count === 24);
+  setOn($('#chip12'), state.count === 12);
+  setOn($('#chip20'), state.count === 20);
+  setOn($('#chip24'), state.count === 24);
   var grid = $('#wordgrid');
   grid.classList.toggle('cols-4', state.count === 24);
   syncList(grid, 'tpl-word', state.count, function (el, i) {
@@ -1585,8 +1590,8 @@ function renderSeed() {
   });
   setVal($('#input-pass'), state.inputPass);
   show($('#decrypt-pass-wrap'), isSlip39() && state.hasPass === true);
-  $('#pass-no').classList.toggle('is-on', state.hasPass === false);
-  $('#pass-yes').classList.toggle('is-on', state.hasPass === true);
+  setOn($('#pass-no'), state.hasPass === false);
+  setOn($('#pass-yes'), state.hasPass === true);
   // Answering is required: a restore has no way to work it out later.
   $('#seed-next').disabled = !state.secret || state.hasPass === null;
   setText($('#seed-fp-label'), state.hasPass

@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #f5f5f2; --panel: #ffffff; --panel2: #faf9f7;
   --text: #14161a; --dim: #6c7280;
   --line: rgba(0, 0, 0, .11); --line2: rgba(0, 0, 0, .06);
@@ -11,6 +12,7 @@
 }
 
 :root[data-dark] {
+  color-scheme: dark;
   --bg: #0d0f12; --panel: #15181d; --panel2: #1b1f25;
   --text: #e9ebee; --dim: #949ba6;
   --line: rgba(255, 255, 255, .12); --line2: rgba(255, 255, 255, .06);
@@ -24,6 +26,11 @@
 * { box-sizing: border-box; }
 
 [hidden] { display: none !important; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
 
 body {
   margin: 0;
@@ -75,8 +82,12 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   background: var(--panel);
 }
 
-.brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
-.brand:hover { text-decoration: none; }
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0; border: 0;
+  background: transparent; color: var(--text);
+  cursor: pointer;
+}
 
 .brand-mark {
   display: flex; align-items: center; justify-content: center;
@@ -272,9 +283,12 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
   color: var(--dim);
 }
 
-.flow-title { margin-top: 6px; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.flow-title { margin: 6px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
 
-.stepper { display: flex; flex-direction: column; margin-top: 24px; }
+.stepper {
+  display: flex; flex-direction: column;
+  margin: 24px 0 0; padding: 0; list-style: none;
+}
 
 .step { display: grid; grid-template-columns: 24px 1fr; gap: 12px; padding-bottom: 18px; }
 
@@ -409,7 +423,10 @@ input[type=range] { width: 100%; margin: 10px 0 0; accent-color: var(--accent); 
 
 /* ---------- share rows ---------- */
 
-.rows { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
+.rows {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 26px 0 0; padding: 0; list-style: none;
+}
 
 .row {
   padding: 14px 18px;
@@ -520,7 +537,10 @@ input[type=range] { width: 100%; margin: 10px 0 0; accent-color: var(--accent); 
 
 .badge-ok+.title { margin-top: 18px; }
 
-.done-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 26px; }
+.done-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin: 26px 0 0; padding: 0; list-style: none;
+}
 
 .done-card {
   padding: 16px;

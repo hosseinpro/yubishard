@@ -4,6 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description"
+    content="Split a wallet recovery phrase into SLIP-39 shares and store one on each YubiKey. Any few of them rebuild the phrase; fewer reveal nothing.">
   <title>YubiShard — split a wallet seed across YubiKeys</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -20,18 +22,16 @@
     </div>
 
     <header class="top">
-      <a href="#" class="brand" data-act="home">
-        <span class="brand-mark">YS</span>
+      <button class="brand" type="button" data-act="home">
+        <span class="brand-mark" aria-hidden="true">YS</span>
         <span class="brand-name">YubiShard</span>
-      </a>
+      </button>
       <span class="env-warn" id="env-banner"></span>
       <div class="top-actions">
         <a class="btn-ghost-sm" href="https://github.com/hosseinpro/yubishard" target="_blank" rel="noopener">GitHub</a>
-        <button class="btn-ghost-sm" data-act="theme" id="theme-btn">Dark</button>
+        <button class="btn-ghost-sm" type="button" data-act="theme" id="theme-btn">Dark</button>
       </div>
     </header>
-
-    <!-- ================= home ================= -->
 
     <main class="home" id="home">
       <span class="pill">Free · open source · runs offline</span>
@@ -39,8 +39,8 @@
       <p class="lede">Standard SLIP-39 shares, one per key, kept apart. Any few of them rebuild
         your recovery phrase — fewer reveal nothing at all.</p>
       <div class="cta-row">
-        <button class="btn btn-primary" data-act="backup">Back up a seed</button>
-        <button class="btn btn-outline" data-act="restore">Restore a seed</button>
+        <button class="btn btn-primary" type="button" data-act="backup">Back up a seed</button>
+        <button class="btn btn-outline" type="button" data-act="restore">Restore a seed</button>
       </div>
 
       <div class="diagram">
@@ -51,7 +51,7 @@
         <div class="diagram-body">
           <div class="seedbox">
             <span>Your seed phrase</span>
-            <span class="ticks">
+            <span class="ticks" aria-hidden="true">
               <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
             </span>
           </div>
@@ -63,7 +63,7 @@
               <span class="rail"><i></i><i></i></span>
               <span class="stem"></span>
               <div class="shard-card">
-                <span class="key-icon"><i></i></span>
+                <span class="key-icon" aria-hidden="true"><i></i></span>
                 <span class="shard-name">YubiKey 1</span>
                 <span class="shard-place">Home safe</span>
                 <span class="shard-blob">costume spew academic acid debut roster…</span>
@@ -73,7 +73,7 @@
               <span class="rail"><i></i><i></i></span>
               <span class="stem"></span>
               <div class="shard-card">
-                <span class="key-icon"><i></i></span>
+                <span class="key-icon" aria-hidden="true"><i></i></span>
                 <span class="shard-name">YubiKey 2</span>
                 <span class="shard-place">Office drawer</span>
                 <span class="shard-blob">mild buyer academic agency duckling volume…</span>
@@ -83,7 +83,7 @@
               <span class="rail"><i></i><i></i></span>
               <span class="stem"></span>
               <div class="shard-card">
-                <span class="key-icon"><i></i></span>
+                <span class="key-icon" aria-hidden="true"><i></i></span>
                 <span class="shard-name">YubiKey 3</span>
                 <span class="shard-place">Bank vault</span>
                 <span class="shard-blob">justice scared academic always aspect strike…</span>
@@ -96,140 +96,125 @@
       </div>
     </main>
 
-    <!-- ================= flow ================= -->
-
     <main class="flow" id="flow" hidden>
-      <nav class="side">
-        <button class="back-link" data-act="home">← All tools</button>
+      <nav class="side" aria-label="Progress">
+        <button class="back-link" type="button" data-act="home">← All tools</button>
         <div class="kicker" id="flow-kicker">Backup</div>
-        <div class="flow-title" id="flow-title">Split and seal</div>
-        <div class="stepper" id="stepper"></div>
+        <h1 class="flow-title" id="flow-title">Split and seal</h1>
+        <ol class="stepper" id="stepper"></ol>
       </nav>
 
       <section class="stage">
 
-        <!-- step: enter seed -->
-        <div class="panel" id="p-seed" hidden>
+        <section class="panel" id="p-seed" hidden>
           <h2 class="title">Enter your recovery phrase</h2>
           <p class="sub">Paste it into any box and the rest fill in automatically. It stays in this tab's
             memory only — never saved, never sent.</p>
-          <div class="wordbar">
-            <button class="chip" id="chip12" data-act="count12">12 words</button>
-            <button class="chip" id="chip20" data-act="count20">20 words</button>
-            <button class="chip" id="chip24" data-act="count24">24 words</button>
+          <div class="wordbar" role="group" aria-label="Phrase length">
+            <button class="chip" type="button" id="chip12" data-act="count12" aria-pressed="false">12 words</button>
+            <button class="chip" type="button" id="chip20" data-act="count20" aria-pressed="false">20 words</button>
+            <button class="chip" type="button" id="chip24" data-act="count24" aria-pressed="false">24 words</button>
             <span class="note" id="std-hint"></span>
             <span class="note" id="word-progress"></span>
           </div>
-          <div class="wordgrid" id="wordgrid"></div>
+          <div class="wordgrid" id="wordgrid" role="group" aria-label="Recovery phrase"></div>
           <div class="card pass-card">
-            <!-- Only recorded as a flag. The passphrase itself is never asked for
-                 and never stored: keeping it out is what makes it a second
-                 factor that stolen keys cannot defeat. -->
-            <span class="field-label">Does this wallet use a passphrase?</span>
-            <div class="chip-row">
-              <button class="chip" id="pass-no" data-act="pass-no">No</button>
-              <button class="chip" id="pass-yes" data-act="pass-yes">Yes</button>
+            <span class="field-label" id="pass-q">Does this wallet use a passphrase?</span>
+            <div class="chip-row" role="group" aria-labelledby="pass-q">
+              <button class="chip" type="button" id="pass-no" data-act="pass-no" aria-pressed="false">No</button>
+              <button class="chip" type="button" id="pass-yes" data-act="pass-yes" aria-pressed="false">Yes</button>
             </div>
-            <!-- Shown only for a 20-word SLIP-39 input, where the passphrase is
-                 needed to decrypt the mnemonic rather than to pick a wallet. -->
-            <label class="field pass-field" id="decrypt-pass-wrap" hidden>
-              <span class="field-label">Passphrase for this share</span>
-              <input class="text" type="password" id="input-pass" data-act="inputpass"
-                autocomplete="off" placeholder="The one that unlocks these 20 words">
-              <span class="field-help">Needed to read the share. Without it the words decode to a
+            <div class="field pass-field" id="decrypt-pass-wrap" hidden>
+              <label class="field-label" for="input-pass">Passphrase for this share</label>
+              <input class="text" type="password" id="input-pass" data-act="inputpass" autocomplete="off"
+                aria-describedby="input-pass-help" placeholder="The one that unlocks these 20 words">
+              <span class="field-help" id="input-pass-help">Needed to read the share. Without it the words decode to a
                 different secret, with no way to tell.</span>
-            </label>
+            </div>
           </div>
           <div class="actions">
-            <button class="btn btn-primary" id="seed-next" data-act="seed-next">Continue</button>
+            <button class="btn btn-primary" type="button" id="seed-next" data-act="seed-next">Continue</button>
             <span class="note" id="seed-fp-wrap" hidden><span id="seed-fp-label"></span>
               <span class="mono" id="seed-fp"></span> — stored on every key, so a restore shows it
               back to you</span>
             <span class="note" id="seed-blocked">Answer the passphrase question to continue</span>
           </div>
-          <div class="err-line" id="seed-err" hidden></div>
+          <div class="err-line" id="seed-err" role="alert" hidden></div>
           <div class="demo-row">
-            <button class="linkbtn" data-act="demo">Fill with a throwaway test phrase</button>
+            <button class="linkbtn" type="button" data-act="demo">Fill with a throwaway test phrase</button>
           </div>
-        </div>
+        </section>
 
-        <!-- step: split settings -->
-        <div class="panel" id="p-split" hidden>
+        <section class="panel" id="p-split" hidden>
           <h2 class="title">Choose how to split it</h2>
           <p class="sub">More shares means more places to lose one safely. A lower threshold means an
             easier recovery — and an easier theft.</p>
           <div class="card">
             <div class="slider-head"><span>Total shares</span><span id="n-val">5</span></div>
-            <input type="range" min="1" max="10" step="1" id="n-range" data-act="n"
+            <input type="range" min="1" max="10" step="1" value="5" id="n-range" data-act="n"
               aria-label="Total shares">
             <div class="slider-head spaced"><span>Needed to restore</span><span id="m-val">3</span></div>
-            <input type="range" min="1" max="10" step="1" id="m-range" data-act="m"
+            <input type="range" min="1" max="10" step="1" value="3" id="m-range" data-act="m"
               aria-label="Needed to restore">
-            <div class="viz-row" id="viz"></div>
+            <div class="viz-row" id="viz" aria-hidden="true"></div>
             <p class="split-sentence" id="split-sentence"></p>
             <p class="split-note" id="split-note"></p>
           </div>
           <div class="actions">
-            <button class="btn btn-primary" id="split-next" data-act="split-next">Split</button>
-            <button class="btn btn-outline" data-act="back">Back</button>
+            <button class="btn btn-primary" type="button" id="split-next" data-act="split-next">Split</button>
+            <button class="btn btn-outline" type="button" data-act="back">Back</button>
           </div>
-        </div>
+        </section>
 
-        <!-- step: write each share onto a key -->
-        <div class="panel" id="p-encrypt" hidden>
+        <section class="panel" id="p-encrypt" hidden>
           <h2 class="title">Write each share to a YubiKey</h2>
-          <!-- Filled by renderWrite: the threshold is interpolated into it. -->
           <p class="sub" id="pin-note"></p>
-          <div class="rows" id="enc-rows"></div>
+          <ul class="rows" id="enc-rows"></ul>
           <div class="actions" id="to-verify-wrap" hidden>
-            <button class="btn btn-primary" data-act="to-verify">Verify the backup →</button>
+            <button class="btn btn-primary" type="button" data-act="to-verify">Verify the backup →</button>
           </div>
-        </div>
+        </section>
 
-        <!-- step: verify -->
-        <div class="panel" id="p-verify" hidden>
+        <section class="panel" id="p-verify" hidden>
           <h2 class="title">Prove it restores</h2>
           <p class="sub" id="verify-sub"></p>
-          <div class="rows" id="verify-rows"></div>
+          <ul class="rows" id="verify-rows"></ul>
           <div class="actions">
-            <button class="btn btn-primary" id="verify-btn" data-act="verify-read">
+            <button class="btn btn-primary" type="button" id="verify-btn" data-act="verify-read">
               <span class="spinner" id="verify-spin" hidden></span>
               <span id="verify-btn-text">Read a YubiKey</span>
             </button>
-            <span class="result" id="verify-msg"></span>
+            <span class="result" id="verify-msg" role="status"></span>
           </div>
-        </div>
+        </section>
 
-        <!-- step: done -->
-        <div class="panel" id="p-done" hidden>
+        <section class="panel" id="p-done" hidden>
           <div class="badge-ok" id="done-badge"></div>
           <h2 class="title">Your backup is ready</h2>
           <p class="sub">Store the keys in different places. <span id="done-fp-label"></span>
             <span class="mono" id="done-fp"></span> — a future restore must show the same.
           </p>
-          <div class="done-grid" id="done-grid"></div>
+          <ul class="done-grid" id="done-grid"></ul>
           <div class="actions">
-            <button class="btn btn-danger" data-act="wipe">Wipe this session</button>
+            <button class="btn btn-danger" type="button" data-act="wipe">Wipe this session</button>
           </div>
-        </div>
+        </section>
 
-        <!-- step: read shares back off the keys -->
-        <div class="panel" id="p-collect" hidden>
+        <section class="panel" id="p-collect" hidden>
           <h2 class="title">Read your YubiKeys</h2>
           <p class="sub">Plug in one key at a time and read its share.</p>
-          <div class="rows" id="collect-rows"></div>
+          <ul class="rows" id="collect-rows"></ul>
           <div class="actions">
-            <button class="btn btn-primary" id="read-btn" data-act="read-key">
+            <button class="btn btn-primary" type="button" id="read-btn" data-act="read-key">
               <span class="spinner" id="read-spin" hidden></span>
               <span id="read-btn-text">Read a YubiKey</span>
             </button>
             <span class="note" id="collect-hint"></span>
           </div>
-          <div class="err-line" id="read-err" hidden></div>
-        </div>
+          <div class="err-line" id="read-err" role="alert" hidden></div>
+        </section>
 
-        <!-- step: restored -->
-        <div class="panel" id="p-restored" hidden>
+        <section class="panel" id="p-restored" hidden>
           <div class="badge-ok">Seed reconstructed</div>
           <h2 class="title">Here is your recovery phrase</h2>
           <p class="sub"><span id="restored-kind"></span> · <b id="restored-passphrase"></b>
@@ -237,19 +222,17 @@
             <span class="mono" id="restored-fp"></span>. Close this tab as soon as you have what you
             need.
           </p>
-          <!-- Shown when the backup recorded that the wallet needs a passphrase.
-               Without this, an empty balance looks like a failed restore. -->
           <div class="err-line" id="restored-pass" hidden></div>
           <div class="reveal-wrap">
             <div class="words-out is-hidden" id="words-out"></div>
           </div>
           <p class="split-note" id="restored-alt" hidden></p>
           <div class="actions">
-            <button class="btn btn-primary" id="reveal-btn" data-act="reveal">Reveal phrase</button>
-            <button class="btn btn-outline" id="copy-seed-btn" data-act="copy-seed">Copy phrase</button>
-            <button class="btn btn-danger" data-act="wipe">Wipe this session</button>
+            <button class="btn btn-primary" type="button" id="reveal-btn" data-act="reveal">Reveal phrase</button>
+            <button class="btn btn-outline" type="button" id="copy-seed-btn" data-act="copy-seed">Copy phrase</button>
+            <button class="btn btn-danger" type="button" data-act="wipe">Wipe this session</button>
           </div>
-        </div>
+        </section>
 
       </section>
     </main>
@@ -261,20 +244,19 @@
 
   </div>
 
-  <!-- ================= row templates ================= -->
-
   <template id="tpl-step">
-    <div class="step">
+    <li class="step">
       <div class="step-rail"><span class="step-dot"></span><span class="step-line"></span></div>
       <div class="step-body">
         <div class="step-title"></div>
         <div class="step-note"></div>
       </div>
-    </div>
+    </li>
   </template>
 
   <template id="tpl-word">
     <label class="word">
+      <span class="sr-only">Word</span>
       <span class="word-n"></span>
       <input spellcheck="false" autocomplete="off" data-act="word">
     </label>
@@ -285,7 +267,7 @@
   </template>
 
   <template id="tpl-enc-row">
-    <div class="row">
+    <li class="row">
       <div class="row-head">
         <span class="row-dot"></span>
         <span class="row-title"></span>
@@ -300,20 +282,17 @@
           </label>
         </div>
         <div class="actions">
-          <button class="btn btn-primary btn-mid f-write" data-act="write-key">
+          <button class="btn btn-primary btn-mid f-write" type="button" data-act="write-key">
             <span class="spinner" hidden></span><span class="f-write-text"></span>
           </button>
           <span class="note f-hint"></span>
         </div>
         <div class="err-line">
-          <span class="f-err"></span>
-          <!-- Chrome blocks pages from navigating to chrome://, so the address
-               is shown to copy rather than linked. Inline, so it reads as the
-               end of the sentence above it. -->
+          <span class="f-err" role="alert"></span>
           <span class="addr-inline f-addr" hidden>
             <span class="f-addr-lead"></span>
             <code class="f-addr-url"></code>
-            <button class="icon-btn" data-act="copy-keys-url" type="button" title="Copy address"
+            <button class="icon-btn" type="button" data-act="copy-keys-url" title="Copy address"
               aria-label="Copy address">
               <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                 <rect x="5.5" y="5.5" width="8" height="9" rx="1.5"></rect>
@@ -327,25 +306,25 @@
       <div class="row-done" hidden>
         <div class="note f-stored"></div>
       </div>
-    </div>
+    </li>
   </template>
 
   <template id="tpl-read-row">
-    <div class="row is-done">
+    <li class="row is-done">
       <div class="row-head">
         <span class="row-dot">✓</span>
         <span class="row-title"></span>
         <span class="row-sub"></span>
         <span class="status ok">Read</span>
       </div>
-    </div>
+    </li>
   </template>
 
   <template id="tpl-done-card">
-    <div class="done-card">
+    <li class="done-card">
       <div class="done-head"><span class="done-num"></span><span class="done-label"></span></div>
       <div class="done-blob"></div>
-    </div>
+    </li>
   </template>
 
   <template id="tpl-word-out">

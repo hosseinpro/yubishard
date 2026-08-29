@@ -88,9 +88,14 @@ This applies to new code and to code you are editing.
 DOM rather than returning anything; it dispatches to one `renderX()` per panel.
 
 **Style state lives in CSS, not JS.** Status colors are modifier classes (`.step.is-done`,
-`.row.is-active`, `.status.ok`, `.chip.is-on`, `.viz.is-needed`, `.result.err`, `.words-out.is-hidden`,
-`.env-note.is-blocked`). Do not compute color strings in JS and interpolate them into `style`
+`.row.is-active`, `.status.ok`, `.chip.is-on`, `.viz.is-needed`, `.result.err`,
+`.words-out.is-hidden`). Do not compute color strings in JS and interpolate them into `style`
 attributes — that was the previous design and it is what made the file unreadable.
+
+**A visual toggle that is also a state must carry ARIA.** `.is-on` is paint; a screen reader sees
+nothing in it. The word-count and passphrase chips are toggle buttons, so `setOn()` sets
+`aria-pressed` alongside the class and every chip ships with `aria-pressed="false"` in the markup.
+Any new chip goes through `setOn()` — never `classList.toggle('is-on', …)` on its own.
 
 **Three CSS rules deliberately cross section boundaries.** `styles.css` is otherwise organised by
 screen, but these are one component appearing in two of them, and splitting them back apart is how
@@ -125,8 +130,43 @@ against out-of-order results with a monotonic `seedToken` — an older keystroke
 overwrite a newer one's.
 
 **Two `.banner`-ish classes exist and they are different.** `.banner` is the pre-existing download
-strip above the header; `.env-note` is the origin/environment notice. They were briefly the same
+strip above the header; `.env-warn` is the origin/environment notice. They were briefly the same
 class and the styles collided.
+
+## Markup
+
+`index.html` carries no comments at all — not even section headers. The panels are in flow order and
+each opens with its `<h2 class="title">`, which is the whole map. What used to sit in comments is
+below.
+
+**Every list is a real list.** `#stepper` is an `<ol>`; `.rows` and `.done-grid` are `<ul>`s; the
+matching templates' root elements are `<li>`. `syncList()` clones `tpl.content.firstElementChild`, so
+a template's root element type is load-bearing — changing a `<li>` back to a `<div>` silently
+produces invalid list markup. The two word grids are *not* lists: `.word-n` already carries the
+ordinal as content, so list semantics would announce every word twice.
+
+**Two `<main>` elements, and that is valid.** `#home` and `#flow` are both `<main>`, which conforms
+only because `showPanels()` guarantees exactly one of them is un-`hidden` at any time. That
+invariant is the thing to preserve; do not "fix" it by wrapping them.
+
+**Accessible names that markup alone cannot give.** A word cell's `<label>` would otherwise be named
+just `"7"`, so `tpl-word` opens with an `.sr-only` `"Word"`. `.brand-mark` is `aria-hidden` so the
+header button is named `"YubiShard"` and not `"YS YubiShard"`. `#viz` is `aria-hidden` entirely — it
+is a picture of the sentence printed directly beneath it.
+
+**`#env-banner` is deliberately not a live region.** `renderEnv()` reassigns its `innerHTML` on every
+render, so an `aria-live` on it would re-announce the origin warning on every keystroke. The error
+lines that *are* live (`#seed-err`, `#read-err`, `.f-err`, `#verify-msg`) all go through `setText()`,
+which writes only on change.
+
+**The `chrome://` address is text with a copy button, never a link.** Chrome blocks a page from
+navigating to a `chrome://` URL, so a link there is dead on arrival. `.addr-inline` sits inline so it
+reads as the end of the sentence above it.
+
+**`#decrypt-pass-wrap` is shown only for 20-word input.** There the passphrase decrypts the mnemonic
+being entered; for 12/24 words the passphrase question is a flag and nothing more. `#restored-pass`
+is the other half of that: without the notice, a passphrase wallet restores to an empty balance and
+looks like a failed recovery.
 
 ## Crypto layer
 
