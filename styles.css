@@ -336,8 +336,14 @@ input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); 
 
 /* ---------- seed grid ---------- */
 
-.wordbar { display: flex; gap: 8px; margin: 26px 0 18px; }
+.wordbar, .chip-row { display: flex; gap: 8px; }
+.wordbar { margin: 26px 0 18px; }
 .wordbar .note { margin-left: auto; align-self: center; font-size: 12.5px; }
+.chip-row { margin-top: 8px; }
+
+.pass-card { margin-top: 16px; }
+.pass-field { margin-top: 14px; }
+.demo-row { margin-top: 18px; }
 
 .chip {
   padding: 7px 14px;

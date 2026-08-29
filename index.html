@@ -121,21 +121,21 @@
             <span class="note" id="word-progress"></span>
           </div>
           <div class="wordgrid" id="wordgrid"></div>
-          <div class="card" style="margin-top:16px">
+          <div class="card pass-card">
             <!-- Only recorded as a flag. The passphrase itself is never asked for
                  and never stored: keeping it out is what makes it a second
                  factor that stolen keys cannot defeat. -->
             <span class="field-label">Does this wallet use a passphrase?</span>
-            <div class="wordbar" style="margin:8px 0 0">
+            <div class="chip-row">
               <button class="chip" id="pass-no" data-act="pass-no">No</button>
               <button class="chip" id="pass-yes" data-act="pass-yes">Yes</button>
             </div>
             <!-- Shown only for a 20-word SLIP-39 input, where the passphrase is
                  needed to decrypt the mnemonic rather than to pick a wallet. -->
-            <label class="field" id="decrypt-pass-wrap" style="margin-top:14px" hidden>
+            <label class="field pass-field" id="decrypt-pass-wrap" hidden>
               <span class="field-label">Passphrase for this share</span>
               <input class="text" type="password" id="input-pass" data-act="inputpass"
-                placeholder="The one that unlocks these 20 words">
+                autocomplete="off" placeholder="The one that unlocks these 20 words">
               <span class="field-help">Needed to read the share. Without it the words decode to a
                 different secret, with no way to tell.</span>
             </label>
@@ -148,7 +148,7 @@
             <span class="note" id="seed-blocked">Answer the passphrase question to continue</span>
           </div>
           <div class="err-line" id="seed-err" hidden></div>
-          <div style="margin-top:18px">
+          <div class="demo-row">
             <button class="linkbtn" data-act="demo">Fill with a throwaway test phrase</button>
           </div>
         </div>
@@ -160,9 +160,11 @@
             easier recovery — and an easier theft.</p>
           <div class="card">
             <div class="slider-head"><span>Total shares</span><span id="n-val">5</span></div>
-            <input type="range" min="1" max="10" step="1" id="n-range" data-act="n">
+            <input type="range" min="1" max="10" step="1" id="n-range" data-act="n"
+              aria-label="Total shares">
             <div class="slider-head spaced"><span>Needed to restore</span><span id="m-val">3</span></div>
-            <input type="range" min="1" max="10" step="1" id="m-range" data-act="m">
+            <input type="range" min="1" max="10" step="1" id="m-range" data-act="m"
+              aria-label="Needed to restore">
             <div class="viz-row" id="viz"></div>
             <p class="split-sentence" id="split-sentence"></p>
             <p class="split-note" id="split-note"></p>
@@ -311,7 +313,7 @@
           <span class="addr-inline f-addr" hidden>
             <span class="f-addr-lead"></span>
             <code class="f-addr-url"></code>
-            <button class="icon-btn f-addr-copy" data-act="copy-keys-url" type="button" title="Copy address"
+            <button class="icon-btn" data-act="copy-keys-url" type="button" title="Copy address"
               aria-label="Copy address">
               <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                 <rect x="5.5" y="5.5" width="8" height="9" rx="1.5"></rect>
