@@ -238,6 +238,25 @@ passphrase, so a restore can always recompute and check it — which is why ther
 fingerprint field. The corollary: if you use a passphrase, the fingerprint stored here will **not**
 match what your wallet shows.
 
+## Where the randomness comes from
+
+Every random byte in YubiShard comes from one source: the browser's `crypto.getRandomValues`, the
+OS-backed CSPRNG. There is no `Math.random`, no fallback generator, and no seeding — and the
+environment check refuses to run anywhere the API could be missing.
+
+What actually rides on it: the random Shamir shares. SLIP-39's guarantee — fewer keys than the
+threshold reveal *nothing* — holds exactly as long as those bytes are uniform, and here they are
+the only line of defense: shares are deliberately encrypted with an empty passphrase (so a Trezor
+can restore them without a prompt), which means the encryption layer contributes no secrecy of its
+own.
+
+The other uses need uniqueness, not secrecy: the 15-bit SLIP-39 identifier that stops shares from
+different backups combining (a collision is caught by the digest check, harmlessly), the WebAuthn
+user handle that keeps one key's credentials distinct, and the challenge each ceremony requires.
+
+YubiShard never generates a wallet — the seed is always the one you type in. Randomness is drawn
+fresh on every split, so running the same backup twice produces unrelated shares that do not mix.
+
 ## If this tool disappears
 
 The share sits in a FIDO2 large blob on the key. `python-fido2` can read it given the key's PIN,
