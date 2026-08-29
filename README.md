@@ -281,6 +281,19 @@ primitives are implemented by hand because Chrome has no native for them:
 
 The first two exist only to compute the BIP-32 fingerprint. The last two are the product.
 
+## Todo
+
+- [ ] Commit the SLIP-39 vector test harness and run it in CI, with the badge in this README —
+      "validated against all 45 official vectors" should be verifiable, not claimed.
+- [ ] Add a `SECURITY.md` with a vulnerability reporting route.
+- [ ] Record a demo GIF of a backup and put it at the top of this README.
+- [ ] Disable the action buttons when served at `127.0.0.1`, where WebAuthn cannot work — today
+      only the banner warns.
+- [ ] Publish proper GitHub Releases with notes instead of bare tags.
+- [ ] Fill in repo metadata: description, topics (`slip39`, `shamir-secret-sharing`, `yubikey`,
+      `webauthn`, `seed-phrase`), social-preview image.
+- [ ] Spread the word once the above trust signals are in place.
+
 ## Further reading
 
 **SLIP-39 / Shamir backup**
