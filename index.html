@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description"
-    content="Split a wallet recovery phrase into SLIP-39 shares and store one on each YubiKey. Any few of them rebuild the phrase; fewer reveal nothing.">
+    content="Split a wallet recovery phrase into SLIP-39 shares and store one on each YubiKey. A threshold of them rebuild the phrase; fewer reveal nothing.">
   <title>YubiShard — split a wallet seed across YubiKeys</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -36,7 +36,7 @@
     <main class="home" id="home">
       <span class="pill">Free · open source · runs offline</span>
       <h1 class="hero">Split a wallet seed across YubiKeys</h1>
-      <p class="lede">Standard SLIP-39 shares, one per key, kept apart. Any few of them rebuild
+      <p class="lede">Standard SLIP-39 shares, one per key, kept apart. A threshold of them rebuild
         your recovery phrase — fewer reveal nothing at all.</p>
       <div class="cta-row">
         <button class="btn btn-primary" type="button" data-act="backup">Back up a seed</button>
@@ -151,8 +151,7 @@
             easier recovery — and an easier theft.</p>
           <div class="card">
             <div class="slider-head"><span>Total shares</span><span id="n-val">5</span></div>
-            <input type="range" min="1" max="10" step="1" value="5" id="n-range" data-act="n"
-              aria-label="Total shares">
+            <input type="range" min="1" max="10" step="1" value="5" id="n-range" data-act="n" aria-label="Total shares">
             <div class="slider-head spaced"><span>Needed to restore</span><span id="m-val">3</span></div>
             <input type="range" min="1" max="10" step="1" value="3" id="m-range" data-act="m"
               aria-label="Needed to restore">
