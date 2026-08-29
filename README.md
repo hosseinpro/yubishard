@@ -291,8 +291,6 @@ Privately, please — see [SECURITY.md](SECURITY.md) for the route and what is i
 ## Todo
 
 - [ ] Record a demo GIF of a backup and put it at the top of this README.
-- [ ] Fill in repo metadata: description, topics (`slip39`, `shamir-secret-sharing`, `yubikey`,
-      `webauthn`, `seed-phrase`), social-preview image.
 - [ ] Spread the word once the above trust signals are in place.
 
 ## Further reading
