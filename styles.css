@@ -587,3 +587,20 @@ input[type=range] { width: 100%; margin: 10px 0 0; accent-color: var(--accent); 
   .field-grid, .done-grid { grid-template-columns: 1fr; }
   .hero { font-size: 34px; }
 }
+
+@media (max-width: 720px) {
+  .banner, .top { padding-left: 16px; padding-right: 16px; }
+
+  .banner { flex-wrap: wrap; align-items: flex-start; }
+  .banner-dot { margin-top: 6px; }
+  .banner > span + span { flex: 1 1 0; min-width: 0; }
+  .banner a { flex-basis: 100%; margin-left: 16px; }
+
+  .top { flex-wrap: wrap; gap: 12px 16px; }
+
+  .env-warn {
+    order: 1; flex-basis: 100%;
+    padding: 12px 0 0;
+    border-left: 0; border-top: 1px solid var(--line);
+  }
+}

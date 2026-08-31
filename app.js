@@ -1006,14 +1006,18 @@ function envReport() {
         + 'Chrome on macOS or Windows 11, opened over <code>http://localhost</code> or https.'
     };
   }
-  const parts = [];
   if (!window.chrome) {
-    parts.push('<b>This browser is probably not supported.</b> Storing a share on a key uses the '
-      + 'largeBlob extension, which Firefox does not implement and does not plan to. Use Chrome.');
+    return {
+      ok: false, html: '<b>This browser is not supported.</b> Storing a share on a key uses the '
+        + 'largeBlob extension, which Firefox does not implement and does not plan to. Open '
+        + 'YubiShard in Chrome on macOS or Windows 11.'
+    };
   }
-  parts.push(`Keys enrolled here are tied to <b><code>${esc(host)}</code></b> and can only be `
-    + 'read back at this same URL.');
-  return { ok: true, html: parts.join(' ') };
+  return {
+    ok: true,
+    html: `Keys enrolled here are tied to <b><code>${esc(host)}</code></b> and can only be `
+      + 'read back at this same URL.'
+  };
 }
 
 /* State */
