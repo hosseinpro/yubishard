@@ -86,6 +86,12 @@ review it before trusting it with a seed.
 
 ## Running it
 
+Download [`yubishard.zip`](https://github.com/hosseinpro/yubishard/releases/latest/download/yubishard.zip)
+from the [latest release](https://github.com/hosseinpro/yubishard/releases/latest) and unzip it.
+It holds only what the tool needs to run — `index.html`, `app.js`, `styles.css` and the two serve
+scripts. The "Source code" archives GitHub adds to every release
+are the whole repository, tests and all; you do not need them to run it.
+
 You cannot open `index.html` directly. A security key identifies a site by its hostname, and a
 `file://` URL has none — so WebAuthn refuses before anything else happens. The page must be served.
 

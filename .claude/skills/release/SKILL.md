@@ -22,25 +22,17 @@ an existing tag.
    `origin/main`. Uncommitted work does not silently ride along in a release — stop and ask if
    the tree is dirty.
 
-2. **Bump the version in `index.html`.** It appears in exactly two places; update both to the
-   same new version:
+2. **Bump the version in `index.html`.** It appears in exactly one place — the footer's left
+   span, both the link text and the tag name in the href:
 
-   - The footer's left span — both the link text and the tag name in the href:
+   ```html
+   <span><a href="https://github.com/hosseinpro/yubishard/releases/tag/vX.Y.Z" target="_blank"
+       rel="noopener">YubiShard vX.Y.Z</a></span>
+   ```
 
-     ```html
-     <span><a href="https://github.com/hosseinpro/yubishard/releases/tag/vX.Y.Z" target="_blank"
-         rel="noopener">YubiShard vX.Y.Z</a></span>
-     ```
-
-   - The download strip's link in `#dl-banner`, which points at GitHub's auto-generated source
-     archive for the tag:
-
-     ```html
-     <a href="https://github.com/hosseinpro/yubishard/archive/refs/tags/vX.Y.Z.zip">Download →</a>
-     ```
-
-   A `grep -n vX.Y.Z index.html` for the *old* version afterward must come back empty — a
-   leftover pins users to a stale download.
+   The download strip in `#dl-banner` points at
+   `releases/latest/download/yubishard.zip` and is not versioned — leave it alone. A
+   `grep -n vX.Y.Z index.html` for the *old* version afterward must come back empty.
 
 3. **Commit, tag, push.** Tag the commit that contains the bump, so the tagged tree shows its
    own version:
@@ -72,6 +64,13 @@ an existing tag.
    Match the tone of the existing releases and of README.md — plain sentences, no emoji, no
    "🎉 What's Changed".
 
+5. **Confirm the zip is attached.** Publishing triggers `.github/workflows/release.yml`, which
+   runs the test suite and uploads `yubishard.zip` (the files needed to run on `localhost`) to
+   the release. The download strip and README link to it through `releases/latest`, so a
+   release without it breaks every download link. Watch it with `gh run watch` and check
+   `gh release view vX.Y.Z --json assets` lists `yubishard.zip`. If it failed, fix the cause and
+   rerun it with `gh workflow run release.yml -f tag=vX.Y.Z`.
+
 ## Report
 
-State the new version, the commit hash, and the release URL.
+State the new version, the commit hash, the release URL, and whether `yubishard.zip` is attached.
